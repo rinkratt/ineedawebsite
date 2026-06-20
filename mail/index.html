@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>I Need Mail | Business Email</title>
+    <meta name="description" content="I Need Mail is a clean webmail app for business mailboxes.">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" href="assets/favicon.svg?v=20260620-ineedmail" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+    <link rel="stylesheet" href="styles.css?v=20260620-ineedmail">
+  </head>
+  <body class="mail-app auth-locked">
+    <section class="login-screen" id="loginScreen" aria-label="Email sign in">
+      <form class="login-panel" id="loginForm">
+        <a class="mail-brand login-brand" href="./" aria-label="I Need Mail home">
+          <img src="assets/mark.svg?v=20260620-ineedmail" alt="">
+          <span>I Need Mail</span>
+        </a>
+        <div>
+          <p class="mail-kicker">Plesk mailbox</p>
+          <h1>Sign in to email</h1>
+        </div>
+        <label>
+          <span>Email address</span>
+          <input id="loginEmail" type="email" autocomplete="username" placeholder="name@example.com" required>
+        </label>
+        <label>
+          <span>Password</span>
+          <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Mailbox password" required>
+        </label>
+        <button class="button primary full" type="submit">Sign in</button>
+        <p class="login-note">Your mailbox password is sent only to this site over HTTPS and kept in the server session while you are signed in.</p>
+      </form>
+    </section>
+
+    <main class="mail-shell" aria-label="I Need Mail email app">
+      <aside class="mail-sidebar" aria-label="Mailboxes">
+        <a class="mail-brand" href="./" aria-label="I Need Mail home">
+          <img src="assets/mark.svg?v=20260620-ineedmail" alt="">
+          <span>I Need Mail</span>
+        </a>
+
+        <button class="compose-launch" type="button" id="composeButton">
+          <span aria-hidden="true">+</span>
+          Compose
+        </button>
+
+        <nav class="mailbox-nav" aria-label="Folders">
+          <button class="mailbox-link active" type="button" data-folder="inbox">
+            <span>Inbox</span>
+            <strong id="inboxCount">0</strong>
+          </button>
+          <button class="mailbox-link" type="button" data-folder="sent">
+            <span>Sent</span>
+            <strong id="sentCount">0</strong>
+          </button>
+          <button class="mailbox-link" type="button" data-folder="drafts">
+            <span>Drafts</span>
+            <strong id="draftCount">0</strong>
+          </button>
+          <button class="mailbox-link" type="button" data-folder="archive">
+            <span>Archive</span>
+            <strong id="archiveCount">0</strong>
+          </button>
+          <button class="mailbox-link" type="button" data-folder="spam">
+            <span>Spam</span>
+            <strong id="spamCount">0</strong>
+          </button>
+          <button class="mailbox-link" type="button" data-folder="trash">
+            <span>Trash</span>
+            <strong id="trashCount">0</strong>
+          </button>
+        </nav>
+
+        <section class="mail-account" aria-label="Current account">
+          <span>Signed in as</span>
+          <strong id="accountEmail">Not signed in</strong>
+          <button class="signout-button" type="button" id="signOutButton">Sign out</button>
+        </section>
+      </aside>
+
+      <section class="mail-main">
+        <header class="mail-topbar">
+          <div>
+            <p class="mail-kicker">Mail</p>
+            <h1>Inbox</h1>
+          </div>
+          <label class="search-box">
+            <span aria-hidden="true">Search</span>
+            <input id="searchInput" type="search" placeholder="Search mail">
+          </label>
+        </header>
+
+        <section class="command-bar" aria-label="Message commands">
+          <button class="command-button primary-command" type="button" id="composeButtonTop">New mail</button>
+          <button class="command-button" type="button" id="replyTop">Reply</button>
+          <button class="command-button" type="button" id="forwardTop">Forward</button>
+          <button class="command-button" type="button" id="archiveTop">Archive</button>
+          <button class="command-button danger-command" type="button" id="deleteTop">Delete</button>
+        </section>
+
+        <section class="mail-workspace">
+          <div class="message-list-panel" aria-label="Messages">
+            <div class="message-list-header">
+              <h2 id="folderTitle">Inbox</h2>
+              <button class="icon-button" type="button" id="refreshButton" title="Refresh inbox" aria-label="Refresh inbox">R</button>
+            </div>
+            <div class="message-list" id="messageList"></div>
+          </div>
+
+          <article class="reading-pane" id="readingPane" aria-live="polite">
+            <div class="empty-state">
+              <h2>Sign in to your mailbox</h2>
+              <p>Your real emails will appear here after sign in.</p>
+            </div>
+          </article>
+        </section>
+      </section>
+    </main>
+
+    <dialog class="compose-dialog" id="composeDialog" aria-labelledby="composeTitle">
+      <form method="dialog" class="compose-form" id="composeForm">
+        <header>
+          <h2 id="composeTitle">New Message</h2>
+          <button class="icon-button" type="button" id="closeCompose" aria-label="Close compose">X</button>
+        </header>
+
+        <label>
+          <span>To</span>
+          <input id="composeTo" type="email" placeholder="name@example.com">
+        </label>
+        <label>
+          <span>Subject</span>
+          <input id="composeSubject" type="text" placeholder="What is this about?">
+        </label>
+        <label class="message-body-field">
+          <span>Message</span>
+          <textarea id="composeBody" rows="9" placeholder="Write your message..."></textarea>
+        </label>
+
+        <footer>
+          <button class="button secondary" type="button" id="saveDraft">Save draft</button>
+          <button class="button primary" type="submit">Send</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script src="app.js?v=20260620-ineedmail"></script>
+  </body>
+</html>

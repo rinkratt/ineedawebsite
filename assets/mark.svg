@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">ineedawebsite.us mark</title>
+  <desc id="desc">A red and black browser-window logo mark with a cursor and globe lines.</desc>
+  <defs>
+    <linearGradient id="redGrad" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#f30612"/>
+      <stop offset="1" stop-color="#c40009"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="88" fill="#fff"/>
+  <g fill="none" stroke="url(#redGrad)" stroke-width="23" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M160 77a183 183 0 0 0 0 358"/>
+    <path d="M160 77c-70 84-70 274 0 358"/>
+    <path d="M59 171c56 31 119 46 188 46"/>
+    <path d="M59 357c56-31 119-46 188-46"/>
+    <path d="M48 256h218"/>
+  </g>
+  <path d="M163 116h252c30 0 54 24 54 54v232H163c-30 0-54-24-54-54V170c0-30 24-54 54-54Z" fill="#fff"/>
+  <path d="M163 116h252c30 0 54 24 54 54v56H109v-56c0-30 24-54 54-54Z" fill="url(#redGrad)"/>
+  <path d="M109 226v122c0 30 24 54 54 54h160" fill="none" stroke="#191919" stroke-width="22" stroke-linecap="round"/>
+  <path d="M469 226v106" fill="none" stroke="#191919" stroke-width="22" stroke-linecap="round"/>
+  <circle cx="164" cy="172" r="15" fill="#fff"/>
+  <circle cx="215" cy="172" r="15" fill="#fff"/>
+  <circle cx="266" cy="172" r="15" fill="#fff"/>
+  <rect x="164" y="259" width="82" height="70" rx="12" fill="url(#redGrad)"/>
+  <path d="M289 277h108M289 325h68" fill="none" stroke="#191919" stroke-width="22" stroke-linecap="round"/>
+  <path d="M305 333 470 426l-71 18 42 64-39 26-42-65-47 55Z" fill="url(#redGrad)" stroke="#fff" stroke-width="18" stroke-linejoin="round"/>
+</svg>

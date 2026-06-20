@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ticket System</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Ticket system navigation">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">TS</div>
+          <div>
+            <p class="eyebrow">Workspace</p>
+            <h1>Ticket System</h1>
+          </div>
+        </div>
+
+        <nav class="nav-list" aria-label="Primary">
+          <button class="nav-item active" id="dashboardNav" type="button" data-view="dashboard">
+            <span aria-hidden="true">⌂</span>
+            <span>Dashboard</span>
+          </button>
+          <button class="nav-item" id="ticketsNav" type="button" data-view="tickets">
+            <span aria-hidden="true">▤</span>
+            <span>Tickets</span>
+          </button>
+          <button class="nav-item" type="button">
+            <span aria-hidden="true">◷</span>
+            <span>Reports</span>
+          </button>
+        </nav>
+
+        <button class="primary-button sidebar-create" id="newTicketButton" type="button">
+          <span aria-hidden="true">＋</span>
+          New Ticket
+        </button>
+
+        <div class="sidebar-section">
+          <p class="section-label">Summary</p>
+          <div class="mini-stat">
+            <span>Open</span>
+            <strong id="openCount">0</strong>
+          </div>
+          <div class="mini-stat">
+            <span>Urgent</span>
+            <strong id="urgentCount">0</strong>
+          </div>
+          <div class="mini-stat">
+            <span>Resolved</span>
+            <strong id="resolvedCount">0</strong>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <section class="dashboard-view" id="dashboardView">
+          <header class="topbar">
+            <div>
+              <p class="eyebrow">Support Operations</p>
+              <h2>Dashboard</h2>
+            </div>
+            <div class="topbar-actions">
+              <button class="icon-button" id="exportButton" type="button" title="Export tickets" aria-label="Export tickets">⇩</button>
+              <label class="icon-button file-button" title="Import tickets" aria-label="Import tickets">
+                ⇧
+                <input id="importInput" type="file" accept="application/json" />
+              </label>
+              <button class="primary-button" id="newTicketTopButton" type="button">
+                <span aria-hidden="true">＋</span>
+                New Ticket
+              </button>
+            </div>
+          </header>
+
+          <section class="metrics-grid" aria-label="Queue metrics">
+            <article class="metric">
+              <span>New today</span>
+              <strong id="newTodayCount">0</strong>
+            </article>
+            <article class="metric">
+              <span>Average age</span>
+              <strong id="averageAge">0d</strong>
+            </article>
+            <article class="metric">
+              <span>Needs response</span>
+              <strong id="needsResponseCount">0</strong>
+            </article>
+          </section>
+
+          <section class="dashboard-grid">
+            <article class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Workload</p>
+                  <h3>Ticket Types</h3>
+                </div>
+              </div>
+              <div class="type-summary" id="dashboardTypeSummary"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Attention</p>
+                  <h3>Priority Queue</h3>
+                </div>
+              </div>
+              <div class="priority-list" id="priorityList"></div>
+            </article>
+
+            <article class="panel team-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Team</p>
+                  <h3>Users</h3>
+                </div>
+              </div>
+              <div class="user-list" id="userList"></div>
+            </article>
+          </section>
+
+          <section class="board" id="dashboardBoard" aria-label="Dashboard ticket board"></section>
+        </section>
+
+        <section class="tickets-view" id="ticketsView" hidden>
+          <header class="queue-header">
+            <div class="view-title">
+              <div>
+                <p class="eyebrow">Service Desk</p>
+                <h2>All Active SR's</h2>
+              </div>
+            </div>
+            <div class="quick-filters" id="typeFilters" aria-label="Quick filters"></div>
+          </header>
+
+          <section class="queue-tools" aria-label="Ticket filters">
+            <div class="tool-buttons">
+              <button class="outline-button" id="assigneeFilterButton" type="button">Assignees</button>
+              <button class="outline-button" id="statusFilterButton" type="button">Statuses</button>
+              <button class="outline-button" id="priorityFilterButton" type="button">Filters</button>
+              <button class="link-button" id="clearFiltersButton" type="button">Clear All</button>
+            </div>
+            <label class="search-box">
+              <span>⌕</span>
+              <input id="searchInput" type="search" placeholder="Search in: ID, Title, Description, Notes" />
+            </label>
+          </section>
+
+          <section class="filter-panel" id="filterPanel" hidden>
+            <label>
+              Status
+              <select id="statusFilter">
+                <option value="all">All statuses</option>
+                <option value="New">New</option>
+                <option value="In Progress">In Progress</option>
+                <option value="User Responded">User Responded</option>
+                <option value="Resolved">Resolved</option>
+              </select>
+            </label>
+            <label>
+              Assignee
+              <select id="assigneeFilter"></select>
+            </label>
+            <label>
+              Priority
+              <select id="priorityFilter">
+                <option value="all">All priorities</option>
+                <option value="P1-Highest">P1-Highest</option>
+                <option value="P4-Normal">P4-Normal</option>
+                <option value="P5-Low">P5-Low</option>
+              </select>
+            </label>
+          </section>
+
+          <section class="table-wrap" aria-label="Service records">
+            <table class="ticket-table">
+              <thead>
+                <tr>
+                  <th><input id="selectAll" type="checkbox" aria-label="Select all tickets" /></th>
+                  <th>ID</th>
+                  <th>Status</th>
+                  <th>Urgency</th>
+                  <th>Request time</th>
+                  <th>Request user</th>
+                  <th>SR Type</th>
+                  <th>Title</th>
+                  <th>Priority</th>
+                  <th>Assigned to</th>
+                  <th>Category</th>
+                  <th>Sub-Category</th>
+                  <th>Modify User</th>
+                </tr>
+              </thead>
+              <tbody id="ticketRows"></tbody>
+            </table>
+          </section>
+
+          <footer class="queue-footer">
+            <label>
+              Page Size:
+              <select id="pageSize">
+                <option>25</option>
+                <option>50</option>
+                <option>100</option>
+              </select>
+            </label>
+            <span id="pageSummary">0 - 0 of 0</span>
+            <div class="pager">
+              <button class="ghost-icon" type="button" aria-label="Previous page">‹</button>
+              <button class="ghost-icon" type="button" aria-label="Next page">›</button>
+            </div>
+          </footer>
+        </section>
+
+        <section class="ticket-detail" id="detailView" hidden>
+          <header class="detail-header">
+            <button class="ghost-icon" id="backButton" type="button" title="Go back" aria-label="Go back">‹</button>
+            <div class="detail-title-block">
+              <p id="detailType">Incident 0000</p>
+              <input id="detailTitle" aria-label="Ticket title" />
+            </div>
+            <div class="detail-actions">
+              <button class="ghost-icon" type="button" title="Share" aria-label="Share">⌯</button>
+              <button class="ghost-icon" type="button" title="More" aria-label="More">⋮</button>
+            </div>
+          </header>
+
+          <div class="summary-strip">
+            <div>
+              <span>Priority</span>
+              <strong class="chip red-chip" id="detailPriority"></strong>
+            </div>
+            <div>
+              <span>Categories</span>
+              <div class="chip-row" id="detailCategories"></div>
+            </div>
+            <div>
+              <span>Assignee</span>
+              <strong id="detailAssignee"></strong>
+            </div>
+            <div>
+              <span>Status</span>
+              <strong class="chip dark-chip" id="detailStatus"></strong>
+            </div>
+          </div>
+
+          <article class="detail-card">
+            <div class="tabs" role="tablist">
+              <button class="tab active" data-tab="details" type="button">Ticket Details</button>
+              <button class="tab" data-tab="ai" type="button">AI Assist</button>
+              <button class="tab" data-tab="journey" type="button">Journey</button>
+              <button class="tab" data-tab="attachments" type="button">Attachments</button>
+              <button class="tab" data-tab="related" type="button">Related Items</button>
+            </div>
+            <div class="tab-panel" id="detailPanel"></div>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <aside class="compose-panel" id="composePanel" hidden aria-label="Create or edit ticket">
+      <form id="ticketForm">
+        <div class="compose-top">
+          <label>
+            Type
+            <select id="typeInput">
+              <option>Incident</option>
+              <option>Problem</option>
+              <option>Request</option>
+              <option>Change</option>
+            </select>
+          </label>
+          <label>
+            Template
+            <select id="templateInput">
+              <option>DEFAULT</option>
+              <option>ACCESS REQUEST</option>
+              <option>OFFBOARDING</option>
+              <option>HARDWARE ISSUE</option>
+            </select>
+          </label>
+          <button class="ghost-icon" id="closeComposeButton" type="button" title="Close" aria-label="Close">×</button>
+        </div>
+
+        <input id="ticketId" type="hidden" />
+        <input class="title-input" id="titleInput" required placeholder="DEFAULT" />
+
+        <div class="compose-strip">
+          <label>
+            Priority
+            <select id="priorityInput">
+              <option>P5-Low</option>
+              <option>P4-Normal</option>
+              <option>P1-Highest</option>
+            </select>
+          </label>
+          <label>
+            Category
+            <select id="categoryInput">
+              <option>Application</option>
+              <option>Hardware</option>
+              <option>Account</option>
+              <option>Access</option>
+            </select>
+          </label>
+          <label>
+            Assignee
+            <input id="assigneeInput" placeholder="Unassigned" />
+          </label>
+          <label>
+            Status
+            <select id="statusInput">
+              <option>New</option>
+              <option>In Progress</option>
+              <option>User Responded</option>
+              <option>Resolved</option>
+            </select>
+          </label>
+        </div>
+
+        <section class="form-section">
+          <h2>General Details</h2>
+          <label>
+            Description *
+            <textarea id="descriptionInput" required rows="7" placeholder="Type your Description here..."></textarea>
+          </label>
+          <div class="form-grid">
+            <label>
+              Urgency *
+              <select id="urgencyInput">
+                <option>Low - Not Urgent</option>
+                <option>Normal - Within a week</option>
+                <option>High - By the end of tomorrow</option>
+                <option>Urgent - Immediately</option>
+              </select>
+            </label>
+            <label>
+              Impact *
+              <select id="impactInput">
+                <option>Individual user</option>
+                <option>Department</option>
+                <option>Organization</option>
+              </select>
+            </label>
+          </div>
+          <div class="form-grid">
+            <label>
+              Request user *
+              <input id="requestUserInput" required placeholder="Select" />
+            </label>
+            <label>
+              Asset ID
+              <input id="assetInput" placeholder="Select" />
+            </label>
+          </div>
+        </section>
+
+        <div class="compose-actions">
+          <button class="link-button" type="button">Add Attachment</button>
+          <div>
+            <button class="secondary-button" id="cancelButton" type="button">Cancel</button>
+            <button class="primary-button" type="submit">Create</button>
+          </div>
+        </div>
+      </form>
+    </aside>
+
+    <script src="app.js"></script>
+  </body>
+</html>

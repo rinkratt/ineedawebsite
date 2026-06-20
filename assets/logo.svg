@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 300" role="img" aria-labelledby="title desc">
+  <title id="title">ineedawebsite.us logo</title>
+  <desc id="desc">A red and black website logo with a browser window, globe lines, cursor, and ineedawebsite.us wordmark.</desc>
+  <defs>
+    <linearGradient id="redGrad" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#f30612"/>
+      <stop offset="1" stop-color="#c40009"/>
+    </linearGradient>
+  </defs>
+  <g>
+    <g fill="none" stroke="url(#redGrad)" stroke-width="11" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M139 43a105 105 0 0 0 0 210"/>
+      <path d="M139 43c-40 49-40 160 0 210"/>
+      <path d="M59 94c32 18 68 27 108 27"/>
+      <path d="M59 201c32-18 68-27 108-27"/>
+      <path d="M43 149h126"/>
+    </g>
+    <path d="M158 55h250c21 0 38 17 38 38v150H158c-21 0-38-17-38-38V93c0-21 17-38 38-38Z" fill="#fff"/>
+    <path d="M158 55h250c21 0 38 17 38 38v34H120V93c0-21 17-38 38-38Z" fill="url(#redGrad)"/>
+    <path d="M120 127v78c0 21 17 38 38 38h176" fill="none" stroke="#191919" stroke-width="11" stroke-linecap="round"/>
+    <path d="M446 127v111" fill="none" stroke="#191919" stroke-width="11" stroke-linecap="round"/>
+    <circle cx="162" cy="92" r="10" fill="#fff"/>
+    <circle cx="190" cy="92" r="10" fill="#fff"/>
+    <circle cx="218" cy="92" r="10" fill="#fff"/>
+    <rect x="157" y="147" width="56" height="48" rx="7" fill="url(#redGrad)"/>
+    <rect x="157" y="213" width="92" height="35" rx="7" fill="url(#redGrad)"/>
+    <path d="M276 159h116M276 190h75" fill="none" stroke="#191919" stroke-width="11" stroke-linecap="round"/>
+    <path d="M339 197 439 254l-45 11 27 41-22 15-27-42-30 35Z" fill="url(#redGrad)" stroke="#fff" stroke-width="9" stroke-linejoin="round"/>
+  </g>
+  <g font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="95" letter-spacing="0">
+    <text x="505" y="190" fill="#df000b" textLength="320" lengthAdjust="spacingAndGlyphs">ineeda</text>
+    <text x="835" y="190" fill="#191919" textLength="390" lengthAdjust="spacingAndGlyphs">website</text>
+    <text x="1218" y="190" fill="#df000b" textLength="132" lengthAdjust="spacingAndGlyphs">.us</text>
+  </g>
+</svg>

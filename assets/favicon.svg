@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">ineedawebsite.us favicon</title>
+  <desc id="desc">A compact red and black browser-window logo mark with a cursor.</desc>
+  <rect width="64" height="64" rx="12" fill="#fff"/>
+  <path d="M11 32h18M13 21c7 4 14 5 21 5M13 43c7-4 14-5 21-5M26 10c-12 9-12 35 0 44" fill="none" stroke="#df000b" stroke-width="5" stroke-linecap="round"/>
+  <path d="M20 16h32a5 5 0 0 1 5 5v7H15v-7a5 5 0 0 1 5-5Z" fill="#df000b"/>
+  <path d="M15 28v16a5 5 0 0 0 5 5h20M57 28v12" fill="none" stroke="#191919" stroke-width="4.5" stroke-linecap="round"/>
+  <circle cx="22" cy="22" r="2" fill="#fff"/>
+  <circle cx="29" cy="22" r="2" fill="#fff"/>
+  <circle cx="36" cy="22" r="2" fill="#fff"/>
+  <rect x="21" y="33" width="11" height="9" rx="1.5" fill="#df000b"/>
+  <path d="M38 35h13M38 42h7" fill="none" stroke="#191919" stroke-width="4.5" stroke-linecap="round"/>
+  <path d="M37 42 59 54l-10 2.5 5.5 8.5-6 4-5.5-8.7-6.5 7Z" fill="#df000b" stroke="#fff" stroke-width="3" stroke-linejoin="round"/>
+</svg>

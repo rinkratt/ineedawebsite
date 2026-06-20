@@ -1,0 +1,11 @@
+.env
+*.zip
+_download_failures.json
+.DS_Store
+Thumbs.db
+
+# Keep live credentials outside source control.
+private/*
+!private/
+!private/*.example.php
+tickets/private/
