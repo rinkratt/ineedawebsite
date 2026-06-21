@@ -15,17 +15,35 @@ let activeTicketId = null;
 let activeDetailTab = "details";
 let activeView = "dashboard";
 const aiAssists = new Map();
+let aiChatBusy = false;
+const aiChatMessages = [
+  { role: "assistant", content: "Hi, what would you like help with?" },
+];
 
 const els = {
   dashboardView: document.querySelector("#dashboardView"),
   ticketsView: document.querySelector("#ticketsView"),
+  reportsView: document.querySelector("#reportsView"),
+  aiChatView: document.querySelector("#aiChatView"),
   detailView: document.querySelector("#detailView"),
   dashboardNav: document.querySelector("#dashboardNav"),
   ticketsNav: document.querySelector("#ticketsNav"),
+  reportsNav: document.querySelector("#reportsNav"),
+  aiChatNav: document.querySelector("#aiChatNav"),
   dashboardBoard: document.querySelector("#dashboardBoard"),
   dashboardTypeSummary: document.querySelector("#dashboardTypeSummary"),
   priorityList: document.querySelector("#priorityList"),
   userList: document.querySelector("#userList"),
+  reportTotalCount: document.querySelector("#reportTotalCount"),
+  reportActiveCount: document.querySelector("#reportActiveCount"),
+  reportResolvedCount: document.querySelector("#reportResolvedCount"),
+  reportPriorityCount: document.querySelector("#reportPriorityCount"),
+  reportStatusList: document.querySelector("#reportStatusList"),
+  reportCategoryList: document.querySelector("#reportCategoryList"),
+  aiChatMessages: document.querySelector("#aiChatMessages"),
+  aiChatForm: document.querySelector("#aiChatForm"),
+  aiChatInput: document.querySelector("#aiChatInput"),
+  aiChatSend: document.querySelector("#aiChatSend"),
   typeFilters: document.querySelector("#typeFilters"),
   ticketRows: document.querySelector("#ticketRows"),
   search: document.querySelector("#searchInput"),
@@ -79,9 +97,12 @@ els.newTicket.addEventListener("click", () => openCompose());
 els.newTicketTop.addEventListener("click", () => openCompose());
 els.dashboardNav.addEventListener("click", () => switchView("dashboard"));
 els.ticketsNav.addEventListener("click", () => switchView("tickets"));
+els.reportsNav.addEventListener("click", () => switchView("reports"));
+els.aiChatNav.addEventListener("click", () => switchView("ai-chat"));
 els.closeCompose.addEventListener("click", closeCompose);
 els.cancel.addEventListener("click", closeCompose);
 els.form.addEventListener("submit", saveTicket);
+els.aiChatForm.addEventListener("submit", sendAiChatMessage);
 els.search.addEventListener("input", renderQueue);
 els.statusFilter.addEventListener("change", renderQueue);
 els.assigneeFilter.addEventListener("change", renderQueue);
@@ -204,6 +225,8 @@ function render() {
   renderTypeFilters();
   renderDashboard();
   renderUsers();
+  renderReports();
+  renderAiChat();
   renderQueue();
   updateMetrics();
   switchView(activeView);
@@ -277,6 +300,8 @@ function showDetail(id) {
   activeDetailTab = "details";
   els.dashboardView.hidden = true;
   els.ticketsView.hidden = true;
+  els.reportsView.hidden = true;
+  els.aiChatView.hidden = true;
   els.detailView.hidden = false;
   renderDetail();
 }
@@ -450,6 +475,63 @@ async function generateAiAssist(ticket) {
   renderAiAssist(ticket);
 }
 
+function renderAiChat() {
+  els.aiChatMessages.innerHTML = aiChatMessages.map((message) => {
+    const classes = [
+      "chat-message",
+      message.role === "user" ? "is-user" : "is-assistant",
+      message.pending ? "is-pending" : "",
+      message.error ? "is-error" : "",
+    ].filter(Boolean).join(" ");
+    const label = message.role === "user" ? "You" : "AI";
+    return `
+      <article class="${classes}">
+        <span>${label}</span>
+        <p>${escapeHtml(message.content)}</p>
+      </article>
+    `;
+  }).join("");
+
+  els.aiChatInput.disabled = aiChatBusy;
+  els.aiChatSend.disabled = aiChatBusy;
+  els.aiChatMessages.scrollTop = els.aiChatMessages.scrollHeight;
+}
+
+async function sendAiChatMessage(event) {
+  event.preventDefault();
+  const content = els.aiChatInput.value.trim();
+  if (!content || aiChatBusy) return;
+
+  aiChatBusy = true;
+  els.aiChatInput.value = "";
+  aiChatMessages.push({ role: "user", content });
+  const pendingMessage = { role: "assistant", content: "Thinking...", pending: true };
+  aiChatMessages.push(pendingMessage);
+  renderAiChat();
+
+  try {
+    const messages = aiChatMessages
+      .filter((message) => !message.pending)
+      .slice(-12)
+      .map((message) => ({ role: message.role, content: message.content }));
+    const result = await apiRequest("action=ai-chat", {
+      method: "POST",
+      body: JSON.stringify({ messages }),
+    });
+    pendingMessage.content = result.message || "I could not generate a response.";
+    pendingMessage.pending = false;
+  } catch (error) {
+    pendingMessage.content = error.message || "AI chat is not available right now.";
+    pendingMessage.pending = false;
+    pendingMessage.error = true;
+    console.error(error);
+  } finally {
+    aiChatBusy = false;
+    renderAiChat();
+    els.aiChatInput.focus();
+  }
+}
+
 function openCompose(ticket = null) {
   els.composePanel.hidden = false;
   els.ticketId.value = ticket?.id || "";
@@ -547,14 +629,20 @@ async function updateDetailTitle() {
 }
 
 function switchView(view) {
-  activeView = view;
+  const validViews = ["dashboard", "tickets", "reports", "ai-chat"];
+  activeView = validViews.includes(view) ? view : "dashboard";
   activeTicketId = null;
   els.detailView.hidden = true;
-  els.dashboardView.hidden = view !== "dashboard";
-  els.ticketsView.hidden = view !== "tickets";
+  els.dashboardView.hidden = activeView !== "dashboard";
+  els.ticketsView.hidden = activeView !== "tickets";
+  els.reportsView.hidden = activeView !== "reports";
+  els.aiChatView.hidden = activeView !== "ai-chat";
   document.querySelectorAll(".nav-item").forEach((item) => {
-    item.classList.toggle("active", item.dataset.view === view);
+    item.classList.toggle("active", item.dataset.view === activeView);
   });
+
+  if (activeView === "reports") renderReports();
+  if (activeView === "ai-chat") renderAiChat();
 }
 
 function updateMetrics() {
@@ -569,6 +657,44 @@ function updateMetrics() {
   els.newTodayCount.textContent = tickets.filter((ticket) => new Date(ticket.requestTime).toDateString() === today).length;
   els.averageAge.textContent = `${averageAge}d`;
   els.needsResponseCount.textContent = tickets.filter((ticket) => ["New", "User Responded"].includes(ticket.status)).length;
+}
+
+function renderReports() {
+  const activeTickets = tickets.filter((ticket) => ticket.status !== "Resolved");
+  els.reportTotalCount.textContent = tickets.length;
+  els.reportActiveCount.textContent = activeTickets.length;
+  els.reportResolvedCount.textContent = tickets.filter((ticket) => ticket.status === "Resolved").length;
+  els.reportPriorityCount.textContent = tickets.filter((ticket) => ticket.priority === "P1-Highest").length;
+  els.reportStatusList.innerHTML = renderReportList(countTicketsBy((ticket) => ticket.status || "Unknown"), tickets.length);
+  els.reportCategoryList.innerHTML = renderReportList(countTicketsBy((ticket) => ticket.category || "Uncategorized"), tickets.length);
+}
+
+function countTicketsBy(getLabel) {
+  return tickets.reduce((counts, ticket) => {
+    const label = getLabel(ticket);
+    counts[label] = (counts[label] || 0) + 1;
+    return counts;
+  }, {});
+}
+
+function renderReportList(counts, total) {
+  const entries = Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  if (!entries.length) {
+    return `<div class="empty-state">No tickets yet</div>`;
+  }
+
+  return entries.map(([label, count]) => {
+    const percent = total ? Math.round((count / total) * 100) : 0;
+    return `
+      <div class="report-row">
+        <div>
+          <strong>${escapeHtml(label)}</strong>
+          <span>${count} ticket${count === 1 ? "" : "s"} - ${percent}%</span>
+        </div>
+        <div class="report-bar" aria-hidden="true"><span style="width: ${percent}%"></span></div>
+      </div>
+    `;
+  }).join("");
 }
 
 function renderDashboard() {

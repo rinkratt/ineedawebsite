@@ -149,6 +149,96 @@ try {
         json_response(['assist' => $assist]);
     }
 
+    if ($action === 'ai-chat') {
+        $body = read_json_body();
+        $rawMessages = $body['messages'] ?? null;
+        if (!is_array($rawMessages)) {
+            json_response(['error' => 'Messages are required'], 400);
+        }
+
+        $truncate = static function (string $value, int $limit): string {
+            if (function_exists('mb_substr')) {
+                return mb_substr($value, 0, $limit);
+            }
+            return substr($value, 0, $limit);
+        };
+
+        $messages = [];
+        foreach ($rawMessages as $message) {
+            if (!is_array($message)) {
+                continue;
+            }
+
+            $role = (string) ($message['role'] ?? '');
+            $content = trim((string) ($message['content'] ?? ''));
+            if (!in_array($role, ['user', 'assistant'], true) || $content === '') {
+                continue;
+            }
+
+            $messages[] = [
+                'role' => $role,
+                'content' => $truncate($content, 2000),
+            ];
+        }
+
+        $messages = array_slice($messages, -12);
+        $hasUserMessage = false;
+        foreach ($messages as $message) {
+            if ($message['role'] === 'user') {
+                $hasUserMessage = true;
+                break;
+            }
+        }
+        if (!$hasUserMessage) {
+            json_response(['error' => 'A user message is required'], 400);
+        }
+
+        $ticketRows = $pdo->query('SELECT id, type, title, status, urgency, request_user, priority, assignee, category, sub_category, description FROM tickets ORDER BY updated_at DESC, id DESC LIMIT 20')->fetchAll();
+        $ticketContext = array_map(static function (array $ticket) use ($truncate): array {
+            return [
+                'id' => (int) $ticket['id'],
+                'type' => $ticket['type'] ?? '',
+                'title' => $ticket['title'] ?? '',
+                'status' => $ticket['status'] ?? '',
+                'urgency' => $ticket['urgency'] ?? '',
+                'requestUser' => $ticket['request_user'] ?? '',
+                'priority' => $ticket['priority'] ?? '',
+                'assignee' => $ticket['assignee'] ?? '',
+                'category' => $ticket['category'] ?? '',
+                'subCategory' => $ticket['sub_category'] ?? '',
+                'description' => $truncate((string) ($ticket['description'] ?? ''), 500),
+            ];
+        }, $ticketRows);
+
+        $input = [
+            [
+                'role' => 'developer',
+                'content' => 'You are the AI chat assistant inside a help desk ticket system for tech staff and end users. Be concise, practical, and friendly. Use the recent ticket context only when it is relevant. Do not invent ticket facts. If information is missing, say what to check or ask next. Do not claim you changed systems, closed tickets, reset passwords, or performed actions; provide suggested steps only.',
+            ],
+            [
+                'role' => 'user',
+                'content' => "Recent ticket context:\n" . json_encode($ticketContext, JSON_THROW_ON_ERROR),
+            ],
+        ];
+
+        foreach ($messages as $message) {
+            $input[] = $message;
+        }
+
+        $response = call_openai([
+            'model' => 'gpt-5.4-mini',
+            'input' => $input,
+            'max_output_tokens' => 900,
+        ]);
+
+        $text = trim(response_output_text($response));
+        if ($text === '') {
+            json_response(['error' => 'AI response was empty'], 502);
+        }
+
+        json_response(['message' => $text]);
+    }
+
     json_response(['error' => 'Unknown action'], 404);
 } catch (Throwable $error) {
     json_response(['error' => 'Server error'], 500);

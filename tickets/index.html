@@ -26,9 +26,13 @@
             <span aria-hidden="true">▤</span>
             <span>Tickets</span>
           </button>
-          <button class="nav-item" type="button">
+          <button class="nav-item" id="reportsNav" type="button" data-view="reports">
             <span aria-hidden="true">◷</span>
             <span>Reports</span>
+          </button>
+          <button class="nav-item" id="aiChatNav" type="button" data-view="ai-chat">
+            <span aria-hidden="true">AI</span>
+            <span>AI Chat</span>
           </button>
         </nav>
 
@@ -212,6 +216,78 @@
               <button class="ghost-icon" type="button" aria-label="Next page">›</button>
             </div>
           </footer>
+        </section>
+
+        <section class="reports-view" id="reportsView" hidden>
+          <header class="topbar">
+            <div>
+              <p class="eyebrow">Support Operations</p>
+              <h2>Reports</h2>
+            </div>
+          </header>
+
+          <section class="metrics-grid" aria-label="Ticket report metrics">
+            <article class="metric">
+              <span>Total tickets</span>
+              <strong id="reportTotalCount">0</strong>
+            </article>
+            <article class="metric">
+              <span>Active tickets</span>
+              <strong id="reportActiveCount">0</strong>
+            </article>
+            <article class="metric">
+              <span>Resolved tickets</span>
+              <strong id="reportResolvedCount">0</strong>
+            </article>
+            <article class="metric">
+              <span>High priority</span>
+              <strong id="reportPriorityCount">0</strong>
+            </article>
+          </section>
+
+          <section class="dashboard-grid">
+            <article class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Status</p>
+                  <h3>Status Breakdown</h3>
+                </div>
+              </div>
+              <div class="report-list" id="reportStatusList"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Category</p>
+                  <h3>Category Breakdown</h3>
+                </div>
+              </div>
+              <div class="report-list" id="reportCategoryList"></div>
+            </article>
+          </section>
+        </section>
+
+        <section class="ai-chat-view" id="aiChatView" hidden>
+          <header class="topbar">
+            <div>
+              <p class="eyebrow">OpenAI Support</p>
+              <h2>AI Chat</h2>
+            </div>
+          </header>
+
+          <section class="chat-shell" aria-label="AI support chat">
+            <div class="chat-header">
+              <h3>Support Assistant</h3>
+              <span class="status-pill">Ready</span>
+            </div>
+            <div class="chat-messages" id="aiChatMessages" aria-live="polite"></div>
+            <form class="chat-form" id="aiChatForm">
+              <label class="sr-only" for="aiChatInput">AI chat message</label>
+              <textarea id="aiChatInput" rows="3" placeholder="Message AI Chat"></textarea>
+              <button class="primary-button" id="aiChatSend" type="submit">Send</button>
+            </form>
+          </section>
         </section>
 
         <section class="ticket-detail" id="detailView" hidden>
