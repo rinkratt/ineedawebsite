@@ -488,6 +488,7 @@ function renderAiChat() {
       <article class="${classes}">
         <span>${label}</span>
         <p>${escapeHtml(message.content)}</p>
+        ${renderChatCitations(message.citations)}
       </article>
     `;
   }).join("");
@@ -519,6 +520,7 @@ async function sendAiChatMessage(event) {
       body: JSON.stringify({ messages }),
     });
     pendingMessage.content = result.message || "I could not generate a response.";
+    pendingMessage.citations = Array.isArray(result.citations) ? result.citations : [];
     pendingMessage.pending = false;
   } catch (error) {
     pendingMessage.content = error.message || "AI chat is not available right now.";
@@ -529,6 +531,37 @@ async function sendAiChatMessage(event) {
     aiChatBusy = false;
     renderAiChat();
     els.aiChatInput.focus();
+  }
+}
+
+function renderChatCitations(citations) {
+  const items = Array.isArray(citations)
+    ? citations.map((citation) => ({ ...citation, url: cleanCitationUrl(citation.url) })).filter((citation) => citation.url).slice(0, 5)
+    : [];
+  if (!items.length) return "";
+
+  return `
+    <div class="chat-citations" aria-label="Sources">
+      <strong>Sources</strong>
+      ${items.map((citation) => `
+        <a href="${escapeHtml(citation.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(citation.title || citation.url)}</a>
+      `).join("")}
+    </div>
+  `;
+}
+
+function cleanCitationUrl(url) {
+  let cleanUrl = String(url || "").trim();
+  ["\"https://", "\"http://", "%22https%3A", "%22http%3A"].forEach((marker) => {
+    const markerIndex = cleanUrl.toLowerCase().indexOf(marker.toLowerCase());
+    if (markerIndex !== -1) cleanUrl = cleanUrl.slice(0, markerIndex);
+  });
+
+  try {
+    const parsed = new URL(cleanUrl);
+    return ["http:", "https:"].includes(parsed.protocol) ? parsed.href : "";
+  } catch {
+    return "";
   }
 }
 

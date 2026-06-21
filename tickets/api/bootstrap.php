@@ -27,6 +27,7 @@ function read_json_body(): array
 function tickets_config_path(): string
 {
     $paths = [
+        dirname(__DIR__, 2) . '/private/tickets_config.php',
         dirname(__DIR__, 3) . '/private/tickets_config.php',
         dirname(__DIR__) . '/private/tickets_config.php',
     ];
@@ -195,4 +196,52 @@ function response_output_text(array $response): string
     }
 
     return trim(implode("\n", $parts));
+}
+
+function response_url_citations(array $response): array
+{
+    $citations = [];
+    $seen = [];
+
+    foreach (($response['output'] ?? []) as $item) {
+        foreach (($item['content'] ?? []) as $content) {
+            foreach (($content['annotations'] ?? []) as $annotation) {
+                if (($annotation['type'] ?? '') !== 'url_citation') {
+                    continue;
+                }
+
+                $url = sanitize_citation_url((string) ($annotation['url'] ?? ''));
+                if ($url === '' || isset($seen[$url])) {
+                    continue;
+                }
+
+                $seen[$url] = true;
+                $citations[] = [
+                    'url' => $url,
+                    'title' => trim((string) ($annotation['title'] ?? $url)),
+                ];
+            }
+        }
+    }
+
+    return array_slice($citations, 0, 8);
+}
+
+function sanitize_citation_url(string $url): string
+{
+    $url = trim($url);
+    foreach (['"https://', '"http://', '%22https%3A', '%22http%3A'] as $marker) {
+        $position = stripos($url, $marker);
+        if ($position !== false) {
+            $url = substr($url, 0, $position);
+        }
+    }
+
+    $parts = parse_url($url);
+    $scheme = strtolower((string) ($parts['scheme'] ?? ''));
+    if (!in_array($scheme, ['http', 'https'], true)) {
+        return '';
+    }
+
+    return $url;
 }

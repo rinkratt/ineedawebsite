@@ -987,6 +987,43 @@ dd {
   background: #fff3f4;
 }
 
+.chat-citations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.chat-citations strong,
+.chat-citations a {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0 9px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.chat-citations strong {
+  color: var(--muted);
+  background: var(--gray-chip);
+}
+
+.chat-citations a {
+  max-width: 260px;
+  overflow: hidden;
+  color: var(--red-dark);
+  background: var(--red-soft);
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-citations a:hover {
+  text-decoration: underline;
+}
+
 .chat-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
