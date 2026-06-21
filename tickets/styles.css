@@ -918,6 +918,8 @@ dd {
 
 .chat-shell {
   display: grid;
+  max-width: 100%;
+  min-width: 0;
   min-height: min(720px, calc(100vh - 150px));
   grid-template-rows: auto minmax(320px, 1fr) auto;
   overflow: hidden;
@@ -938,8 +940,10 @@ dd {
 
 .chat-messages {
   display: grid;
+  min-width: 0;
   align-content: start;
   gap: 12px;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: 20px;
   background: #fbfbfc;
@@ -948,12 +952,15 @@ dd {
 .chat-message {
   display: grid;
   gap: 6px;
+  min-width: 0;
   max-width: min(720px, 88%);
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 12px 14px;
   background: var(--panel);
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .chat-message.is-user {
@@ -974,7 +981,11 @@ dd {
 }
 
 .chat-message p {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .chat-message.is-pending p {
@@ -991,6 +1002,8 @@ dd {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  min-width: 0;
+  max-width: 100%;
   padding-top: 4px;
 }
 
@@ -1011,7 +1024,8 @@ dd {
 }
 
 .chat-citations a {
-  max-width: 260px;
+  max-width: min(260px, 100%);
+  min-width: 0;
   overflow: hidden;
   color: var(--red-dark);
   background: var(--red-soft);
