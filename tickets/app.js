@@ -1,18 +1,22 @@
 const API_URL = "api/index.php";
 
 const typeNames = ["All", "Incident", "Problem", "Request", "Change"];
-const priorityOptions = ["P1-Highest", "P2-High", "P3-Medium", "P4-Normal", "P5-Low"];
-const statusOptions = ["New", "Open", "In Progress", "Escalated", "Waiting on Customer", "User Responded", "Pending Vendor", "On Hold", "Resolved", "Closed", "Cancelled"];
-const resolvedStatuses = ["Resolved", "Closed", "Cancelled"];
+const defaultPriorityOptions = ["P1-Highest", "P2-High", "P3-Medium", "P4-Normal", "P5-Low"];
+const defaultStatusOptions = ["New", "Open", "In Progress", "Escalated", "Waiting on Customer", "User Responded", "Pending Vendor", "On Hold", "Resolved", "Closed", "Cancelled"];
+let priorityOptions = [...defaultPriorityOptions];
+let prioritySettings = defaultPriorityOptions.map((label, index) => ({ id: `default-priority-${index}`, label, sortOrder: index + 1, active: true }));
+let statusOptions = [...defaultStatusOptions];
+let statusSettings = defaultStatusOptions.map((label, index) => ({ id: `default-status-${index}`, label, sortOrder: index + 1, active: true, isResolved: ["Resolved", "Closed", "Cancelled"].includes(label) }));
+let resolvedStatuses = ["Resolved", "Closed", "Cancelled"];
 const responseStatuses = ["New", "Open", "Escalated", "User Responded"];
 const categoryKeySeparator = "|||";
 const fallbackCategories = [
-  { id: "fallback-application", category: "Application", subCategory: "Ticket System", thirdCategory: "General" },
-  { id: "fallback-hardware", category: "Hardware", subCategory: "Device", thirdCategory: "General" },
-  { id: "fallback-account", category: "Account", subCategory: "Access", thirdCategory: "General" },
-  { id: "fallback-access", category: "Access", subCategory: "Account Access", thirdCategory: "Cannot log on" },
+  { id: "fallback-application", category: "Application", subCategory: "Ticket System", thirdCategory: "General", active: true },
+  { id: "fallback-hardware", category: "Hardware", subCategory: "Device", thirdCategory: "General", active: true },
+  { id: "fallback-account", category: "Account", subCategory: "Access", thirdCategory: "General", active: true },
+  { id: "fallback-access", category: "Access", subCategory: "Account Access", thirdCategory: "Cannot log on", active: true },
 ];
-const categoryOptions = (Array.isArray(window.ticketCategories) && window.ticketCategories.length ? window.ticketCategories : fallbackCategories).map(normalizeCategoryOption);
+let categoryOptions = (Array.isArray(window.ticketCategories) && window.ticketCategories.length ? window.ticketCategories : fallbackCategories).map(normalizeCategoryOption);
 
 const defaultUsers = [
   { id: 1, name: "Kelly Cox", email: "kelly.cox@ineedawebsite.us", role: "Admin" },
@@ -27,6 +31,7 @@ let activeTicketId = null;
 let activeDetailTab = "details";
 let activeView = "dashboard";
 let currentUser = null;
+let categorySettingsSearch = "";
 const aiAssists = new Map();
 let aiChatBusy = false;
 const aiChatMessages = [
@@ -52,11 +57,13 @@ const els = {
   ticketsView: document.querySelector("#ticketsView"),
   reportsView: document.querySelector("#reportsView"),
   aiChatView: document.querySelector("#aiChatView"),
+  settingsView: document.querySelector("#settingsView"),
   detailView: document.querySelector("#detailView"),
   dashboardNav: document.querySelector("#dashboardNav"),
   ticketsNav: document.querySelector("#ticketsNav"),
   reportsNav: document.querySelector("#reportsNav"),
   aiChatNav: document.querySelector("#aiChatNav"),
+  settingsNav: document.querySelector("#settingsNav"),
   dashboardBoard: document.querySelector("#dashboardBoard"),
   dashboardTypeSummary: document.querySelector("#dashboardTypeSummary"),
   priorityList: document.querySelector("#priorityList"),
@@ -119,6 +126,21 @@ const els = {
   detailAssignee: document.querySelector("#detailAssignee"),
   detailStatus: document.querySelector("#detailStatus"),
   detailPanel: document.querySelector("#detailPanel"),
+  saveSettings: document.querySelector("#saveSettingsButton"),
+  addPriority: document.querySelector("#addPriorityButton"),
+  addStatus: document.querySelector("#addStatusButton"),
+  addCategory: document.querySelector("#addCategoryButton"),
+  prioritySettingsList: document.querySelector("#prioritySettingsList"),
+  statusSettingsList: document.querySelector("#statusSettingsList"),
+  categorySettingsList: document.querySelector("#categorySettingsList"),
+  categorySettingsSearch: document.querySelector("#categorySettingsSearch"),
+  userSettingsList: document.querySelector("#userSettingsList"),
+  addUserForm: document.querySelector("#addUserForm"),
+  newUserName: document.querySelector("#newUserName"),
+  newUserEmail: document.querySelector("#newUserEmail"),
+  newUserRole: document.querySelector("#newUserRole"),
+  newUserPassword: document.querySelector("#newUserPassword"),
+  newUserIsTech: document.querySelector("#newUserIsTech"),
 };
 
 els.loginForm.addEventListener("submit", login);
@@ -130,10 +152,30 @@ els.dashboardNav.addEventListener("click", () => switchView("dashboard"));
 els.ticketsNav.addEventListener("click", () => switchView("tickets"));
 els.reportsNav.addEventListener("click", () => switchView("reports"));
 els.aiChatNav.addEventListener("click", () => switchView("ai-chat"));
+els.settingsNav.addEventListener("click", () => switchView("settings"));
 els.closeCompose.addEventListener("click", closeCompose);
 els.cancel.addEventListener("click", closeCompose);
 els.form.addEventListener("submit", saveTicket);
 els.aiChatForm.addEventListener("submit", sendAiChatMessage);
+els.saveSettings.addEventListener("click", saveSettings);
+els.addPriority.addEventListener("click", () => addSettingRow("priority"));
+els.addStatus.addEventListener("click", () => addSettingRow("status"));
+els.addCategory.addEventListener("click", () => addSettingRow("category"));
+els.categorySettingsSearch.addEventListener("input", () => {
+  categorySettingsSearch = els.categorySettingsSearch.value.trim().toLowerCase();
+  renderCategorySettings();
+});
+els.addUserForm.addEventListener("submit", saveNewUser);
+els.prioritySettingsList.addEventListener("input", updateSettingFromEvent);
+els.prioritySettingsList.addEventListener("change", updateSettingFromEvent);
+els.prioritySettingsList.addEventListener("click", removeSettingFromEvent);
+els.statusSettingsList.addEventListener("input", updateSettingFromEvent);
+els.statusSettingsList.addEventListener("change", updateSettingFromEvent);
+els.statusSettingsList.addEventListener("click", removeSettingFromEvent);
+els.categorySettingsList.addEventListener("input", updateSettingFromEvent);
+els.categorySettingsList.addEventListener("change", updateSettingFromEvent);
+els.categorySettingsList.addEventListener("click", removeSettingFromEvent);
+els.userSettingsList.addEventListener("click", saveUserFromEvent);
 els.search.addEventListener("input", renderQueue);
 els.statusFilter.addEventListener("change", renderQueue);
 els.assigneeFilter.addEventListener("change", renderQueue);
@@ -169,6 +211,7 @@ async function loadApp() {
   try {
     const data = await apiRequest("action=bootstrap");
     currentUser = data.currentUser || null;
+    applySettings(data.settings || {});
     users = data.users?.length ? data.users : defaultUsers;
     tickets = Array.isArray(data.tickets) ? data.tickets.map(normalizeTicket) : [];
     if (currentUser?.passwordResetRequired) {
@@ -295,12 +338,61 @@ function showPasswordChange(message = "") {
 function showApp() {
   els.loginScreen.hidden = true;
   els.appShell.hidden = false;
+  els.settingsNav.hidden = !isAdmin();
+  if (!isAdmin() && activeView === "settings") activeView = "dashboard";
   els.currentUserName.textContent = currentUser?.name || "Signed in";
   els.currentUserRole.textContent = currentUser?.role || "";
 }
 
 function actorName() {
   return currentUser?.name || "System";
+}
+
+function isAdmin() {
+  return (currentUser?.role || "").toLowerCase().includes("admin");
+}
+
+function applySettings(settings = {}) {
+  prioritySettings = Array.isArray(settings.priorities) && settings.priorities.length
+    ? settings.priorities.map(normalizePrioritySetting)
+    : prioritySettings;
+  priorityOptions = prioritySettings.filter((priority) => priority.active).map((priority) => priority.label);
+  if (!priorityOptions.length) priorityOptions = [...defaultPriorityOptions];
+
+  statusSettings = Array.isArray(settings.statuses) && settings.statuses.length
+    ? settings.statuses.map(normalizeStatusSetting)
+    : statusSettings;
+  statusOptions = statusSettings.filter((status) => status.active).map((status) => status.label);
+  if (!statusOptions.length) statusOptions = [...defaultStatusOptions];
+  resolvedStatuses = statusSettings.filter((status) => status.active && status.isResolved).map((status) => status.label);
+  if (!resolvedStatuses.length) resolvedStatuses = ["Resolved", "Closed", "Cancelled"].filter((status) => statusOptions.includes(status));
+
+  categoryOptions = Array.isArray(settings.categories) && settings.categories.length
+    ? settings.categories.map(normalizeCategoryOption)
+    : categoryOptions;
+}
+
+function normalizePrioritySetting(priority = {}, index = 0) {
+  return {
+    id: priority.id || `priority-${Date.now()}-${index}`,
+    label: String(priority.label || "").trim(),
+    sortOrder: Number(priority.sortOrder || index + 1),
+    active: priority.active !== false,
+  };
+}
+
+function normalizeStatusSetting(status = {}, index = 0) {
+  return {
+    id: status.id || `status-${Date.now()}-${index}`,
+    label: String(status.label || "").trim(),
+    sortOrder: Number(status.sortOrder || index + 1),
+    active: status.active !== false,
+    isResolved: Boolean(status.isResolved),
+  };
+}
+
+function getTechUsers() {
+  return users.filter((user) => user.active !== false && user.isTech !== false);
 }
 
 function starterTickets() {
@@ -350,11 +442,11 @@ function normalizeTicket(ticket) {
     id: Number(ticket.id),
     type: ticket.type || "Request",
     title: ticket.title || "Untitled ticket",
-    status: statusOptions.includes(ticket.status) ? ticket.status : "New",
+    status: ticket.status || statusOptions[0] || "New",
     urgency: ticket.urgency || "Low - Not Urgent",
     requestTime: ticket.requestTime || ticket.request_time || new Date().toISOString(),
     requestUser: ticket.requestUser || ticket.request_user || "Kelly Cox",
-    priority: priorityOptions.includes(ticket.priority) ? ticket.priority : "P5-Low",
+    priority: ticket.priority || priorityOptions[priorityOptions.length - 1] || "P5-Low",
     assignee: ticket.assignee || "",
     category: ticket.category || "Application",
     subCategory: ticket.subCategory || ticket.sub_category || "Ticket System",
@@ -371,10 +463,12 @@ function normalizeTicket(ticket) {
 }
 
 function render() {
+  renderFilterOptions();
   renderAssigneeOptions();
   renderTypeFilters();
   renderDashboard();
   renderUsers();
+  renderSettings();
   renderReports();
   renderAiChat();
   renderQueue();
@@ -401,21 +495,43 @@ function renderTypeFilters() {
 
 function renderAssigneeOptions() {
   const current = els.assigneeFilter.value || "all";
-  const assignees = [...new Set([...users.map((user) => user.name), ...tickets.map((ticket) => ticket.assignee).filter(Boolean)])].sort();
+  const assignees = [...new Set([...getTechUsers().map((user) => user.name), ...tickets.map((ticket) => ticket.assignee).filter(Boolean)])].sort();
   els.assigneeFilter.innerHTML = `<option value="all">All assignees</option>${assignees.map((name) => `<option>${escapeHtml(name)}</option>`).join("")}`;
   els.assigneeFilter.value = assignees.includes(current) ? current : "all";
 }
 
 function renderSelectOptions(options, selected) {
-  return options.map((option) => `<option value="${escapeHtml(option)}"${option === selected ? " selected" : ""}>${escapeHtml(option)}</option>`).join("");
+  const optionList = [...options];
+  if (selected && !optionList.includes(selected)) optionList.unshift(selected);
+  return optionList.map((option) => `<option value="${escapeHtml(option)}"${option === selected ? " selected" : ""}>${escapeHtml(option)}</option>`).join("");
+}
+
+function renderFilterOptions() {
+  const currentStatus = els.statusFilter.value || "all";
+  const currentPriority = els.priorityFilter.value || "all";
+  els.statusFilter.innerHTML = `<option value="all">All statuses</option>${statusOptions.map((status) => `<option value="${escapeHtml(status)}">${escapeHtml(status)}</option>`).join("")}`;
+  els.priorityFilter.innerHTML = `<option value="all">All priorities</option>${priorityOptions.map((priority) => `<option value="${escapeHtml(priority)}">${escapeHtml(priority)}</option>`).join("")}`;
+  els.statusFilter.value = statusOptions.includes(currentStatus) ? currentStatus : "all";
+  els.priorityFilter.value = priorityOptions.includes(currentPriority) ? currentPriority : "all";
+}
+
+function renderAssigneeInput(selected = "") {
+  const techs = getTechUsers();
+  const options = techs.map((user) => user.name);
+  if (selected && !options.includes(selected)) options.unshift(selected);
+  els.assigneeInput.innerHTML = `<option value="">Unassigned</option>${options.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("")}`;
+  els.assigneeInput.value = selected && options.includes(selected) ? selected : "";
 }
 
 function normalizeCategoryOption(option = {}) {
   return {
     id: option.id || "",
+    sysAidId: option.sysAidId || option.sysaid_id || null,
     category: String(option.category || "Application"),
     subCategory: String(option.subCategory || option.sub_category || ""),
     thirdCategory: String(option.thirdCategory || option.third_category || ""),
+    sortOrder: Number(option.sortOrder || option.sort_order || 0),
+    active: option.active !== false,
   };
 }
 
@@ -434,6 +550,10 @@ function categoryOptionFromKey(key) {
   return category ? normalizeCategoryOption({ category, subCategory, thirdCategory }) : null;
 }
 
+function activeCategoryOptions() {
+  return categoryOptions.filter((option) => option.active !== false);
+}
+
 function categoryOptionFromTicket(ticket) {
   const current = normalizeCategoryOption({
     category: ticket?.category,
@@ -447,11 +567,12 @@ function selectedCategoryOption() {
   const selectedKey = els.categoryInput.value;
   return categoryOptions.find((option) => categoryOptionKey(option) === selectedKey)
     || categoryOptionFromKey(selectedKey)
+    || activeCategoryOptions()[0]
     || categoryOptions[0];
 }
 
 function renderCategoryOptions(selectedKey, currentCategory = null) {
-  const options = [...categoryOptions];
+  const options = [...activeCategoryOptions()];
   const current = currentCategory ? normalizeCategoryOption(currentCategory) : null;
   if (current && !options.some((option) => categoryOptionKey(option) === categoryOptionKey(current))) {
     options.unshift(current);
@@ -511,6 +632,7 @@ function showDetail(id) {
   els.ticketsView.hidden = true;
   els.reportsView.hidden = true;
   els.aiChatView.hidden = true;
+  els.settingsView.hidden = true;
   els.detailView.hidden = false;
   renderDetail();
 }
@@ -777,17 +899,21 @@ function cleanCitationUrl(url) {
 }
 
 function openCompose(ticket = null) {
-  const selectedCategory = ticket ? categoryOptionFromTicket(ticket) : categoryOptions[0];
+  const selectedCategory = ticket ? categoryOptionFromTicket(ticket) : activeCategoryOptions()[0] || categoryOptions[0];
   const selectedCategoryKey = categoryOptionKey(selectedCategory);
+  const selectedPriority = ticket?.priority || priorityOptions[priorityOptions.length - 1] || "P5-Low";
+  const selectedStatus = ticket?.status || statusOptions[0] || "New";
   els.composePanel.hidden = false;
   els.ticketId.value = ticket?.id || "";
   els.titleInput.value = ticket?.title || "DEFAULT";
   els.typeInput.value = ticket?.type || "Incident";
   els.templateInput.value = ticket?.template || "DEFAULT";
-  els.priorityInput.value = priorityOptions.includes(ticket?.priority) ? ticket.priority : "P5-Low";
+  els.priorityInput.innerHTML = renderSelectOptions(priorityOptions, selectedPriority);
+  els.priorityInput.value = selectedPriority;
   renderCategoryOptions(selectedCategoryKey, selectedCategory);
-  els.assigneeInput.value = ticket?.assignee || "";
-  els.statusInput.value = statusOptions.includes(ticket?.status) ? ticket.status : "New";
+  renderAssigneeInput(ticket?.assignee || "");
+  els.statusInput.innerHTML = renderSelectOptions(statusOptions, selectedStatus);
+  els.statusInput.value = selectedStatus;
   els.descriptionInput.value = ticket?.description || "";
   els.urgencyInput.value = ticket?.urgency || "Low - Not Urgent";
   els.impactInput.value = ticket?.impact || "Individual user";
@@ -904,7 +1030,8 @@ async function updateDetailField(field, value) {
 }
 
 function switchView(view) {
-  const validViews = ["dashboard", "tickets", "reports", "ai-chat"];
+  const validViews = ["dashboard", "tickets", "reports", "ai-chat", "settings"];
+  if (view === "settings" && !isAdmin()) view = "dashboard";
   activeView = validViews.includes(view) ? view : "dashboard";
   activeTicketId = null;
   els.detailView.hidden = true;
@@ -912,12 +1039,14 @@ function switchView(view) {
   els.ticketsView.hidden = activeView !== "tickets";
   els.reportsView.hidden = activeView !== "reports";
   els.aiChatView.hidden = activeView !== "ai-chat";
+  els.settingsView.hidden = activeView !== "settings";
   document.querySelectorAll(".nav-item").forEach((item) => {
     item.classList.toggle("active", item.dataset.view === activeView);
   });
 
   if (activeView === "reports") renderReports();
   if (activeView === "ai-chat") renderAiChat();
+  if (activeView === "settings") renderSettings();
 }
 
 function updateMetrics() {
@@ -927,7 +1056,7 @@ function updateMetrics() {
   const today = new Date().toDateString();
 
   els.openCount.textContent = activeTickets.length;
-  els.urgentCount.textContent = tickets.filter((ticket) => ticket.urgency.includes("Urgent") || ["P1-Highest", "P2-High"].includes(ticket.priority)).length;
+  els.urgentCount.textContent = tickets.filter((ticket) => ticket.urgency.includes("Urgent") || highPriorityOptions().includes(ticket.priority)).length;
   els.resolvedCount.textContent = tickets.filter((ticket) => resolvedStatuses.includes(ticket.status)).length;
   els.newTodayCount.textContent = tickets.filter((ticket) => new Date(ticket.requestTime).toDateString() === today).length;
   els.averageAge.textContent = `${averageAge}d`;
@@ -939,7 +1068,7 @@ function renderReports() {
   els.reportTotalCount.textContent = tickets.length;
   els.reportActiveCount.textContent = activeTickets.length;
   els.reportResolvedCount.textContent = tickets.filter((ticket) => resolvedStatuses.includes(ticket.status)).length;
-  els.reportPriorityCount.textContent = tickets.filter((ticket) => ["P1-Highest", "P2-High"].includes(ticket.priority)).length;
+  els.reportPriorityCount.textContent = tickets.filter((ticket) => highPriorityOptions().includes(ticket.priority)).length;
   els.reportStatusList.innerHTML = renderReportList(countTicketsBy((ticket) => ticket.status || "Unknown"), tickets.length);
   els.reportCategoryList.innerHTML = renderReportList(countTicketsBy((ticket) => ticket.category || "Uncategorized"), tickets.length);
 }
@@ -972,6 +1101,208 @@ function renderReportList(counts, total) {
   }).join("");
 }
 
+function renderSettings() {
+  if (!isAdmin()) return;
+  renderPrioritySettings();
+  renderStatusSettings();
+  renderCategorySettings();
+  renderUserSettings();
+}
+
+function renderPrioritySettings() {
+  els.prioritySettingsList.innerHTML = prioritySettings.map((priority, index) => `
+    <div class="setting-row" data-setting-type="priority" data-index="${index}">
+      <input class="setting-input" data-setting-field="label" value="${escapeHtml(priority.label)}" placeholder="Priority" />
+      <label class="check-label"><input data-setting-field="active" type="checkbox"${priority.active ? " checked" : ""} /> Active</label>
+      <button class="ghost-icon" data-remove-setting type="button" title="Remove priority" aria-label="Remove priority">X</button>
+    </div>
+  `).join("");
+}
+
+function renderStatusSettings() {
+  els.statusSettingsList.innerHTML = statusSettings.map((status, index) => `
+    <div class="setting-row status-setting-row" data-setting-type="status" data-index="${index}">
+      <input class="setting-input" data-setting-field="label" value="${escapeHtml(status.label)}" placeholder="Status" />
+      <label class="check-label"><input data-setting-field="isResolved" type="checkbox"${status.isResolved ? " checked" : ""} /> Done</label>
+      <label class="check-label"><input data-setting-field="active" type="checkbox"${status.active ? " checked" : ""} /> Active</label>
+      <button class="ghost-icon" data-remove-setting type="button" title="Remove status" aria-label="Remove status">X</button>
+    </div>
+  `).join("");
+}
+
+function renderCategorySettings() {
+  const rows = categoryOptions
+    .map((category, index) => ({ category, index }))
+    .filter(({ category }) => {
+      if (!categorySettingsSearch) return true;
+      return categoryOptionLabel(category).toLowerCase().includes(categorySettingsSearch);
+    });
+
+  els.categorySettingsList.innerHTML = rows.map(({ category, index }) => `
+    <div class="setting-row category-setting-row" data-setting-type="category" data-index="${index}">
+      <input class="setting-input" data-setting-field="category" value="${escapeHtml(category.category)}" placeholder="Category" />
+      <input class="setting-input" data-setting-field="subCategory" value="${escapeHtml(category.subCategory)}" placeholder="Sub-category" />
+      <input class="setting-input" data-setting-field="thirdCategory" value="${escapeHtml(category.thirdCategory)}" placeholder="Third category" />
+      <label class="check-label"><input data-setting-field="active" type="checkbox"${category.active ? " checked" : ""} /> Active</label>
+      <button class="ghost-icon" data-remove-setting type="button" title="Remove category" aria-label="Remove category">X</button>
+    </div>
+  `).join("");
+}
+
+function renderUserSettings() {
+  els.userSettingsList.innerHTML = users.map((user) => {
+    const roles = [...new Set(["Tier 1 Tech", "Tier 2 Tech", "Admin", "End User", user.role].filter(Boolean))];
+    return `
+      <div class="setting-row user-setting-row" data-user-id="${user.id}">
+        <input class="setting-input" data-user-field="name" value="${escapeHtml(user.name)}" placeholder="Name" />
+        <input class="setting-input" data-user-field="email" type="email" value="${escapeHtml(user.email)}" placeholder="Email" />
+        <select class="setting-input" data-user-field="role">
+          ${roles.map((role) => `<option${role === user.role ? " selected" : ""}>${escapeHtml(role)}</option>`).join("")}
+        </select>
+        <input class="setting-input" data-user-field="temporaryPassword" type="password" placeholder="Reset password" />
+        <label class="check-label"><input data-user-field="isTech" type="checkbox"${user.isTech !== false ? " checked" : ""} /> Tech</label>
+        <label class="check-label"><input data-user-field="active" type="checkbox"${user.active !== false ? " checked" : ""} /> Active</label>
+        <button class="secondary-button" data-save-user type="button">Save</button>
+      </div>
+    `;
+  }).join("");
+}
+
+function addSettingRow(type) {
+  if (type === "priority") {
+    prioritySettings.push({ id: `new-priority-${Date.now()}`, label: "", sortOrder: prioritySettings.length + 1, active: true });
+    renderPrioritySettings();
+  }
+  if (type === "status") {
+    statusSettings.push({ id: `new-status-${Date.now()}`, label: "", sortOrder: statusSettings.length + 1, active: true, isResolved: false });
+    renderStatusSettings();
+  }
+  if (type === "category") {
+    categoryOptions.push({ id: `new-category-${Date.now()}`, category: "", subCategory: "", thirdCategory: "", active: true, sortOrder: categoryOptions.length + 1 });
+    renderCategorySettings();
+  }
+}
+
+function updateSettingFromEvent(event) {
+  const row = event.target.closest(".setting-row");
+  if (!row || !event.target.dataset.settingField) return;
+  const index = Number(row.dataset.index);
+  const type = row.dataset.settingType;
+  const field = event.target.dataset.settingField;
+  const value = event.target.type === "checkbox" ? event.target.checked : event.target.value;
+  const collection = type === "priority" ? prioritySettings : type === "status" ? statusSettings : categoryOptions;
+  if (!collection[index]) return;
+  collection[index][field] = value;
+}
+
+function removeSettingFromEvent(event) {
+  const button = event.target.closest("[data-remove-setting]");
+  if (!button) return;
+  const row = button.closest(".setting-row");
+  const index = Number(row.dataset.index);
+  const type = row.dataset.settingType;
+  if (type === "priority") {
+    prioritySettings.splice(index, 1);
+    renderPrioritySettings();
+  }
+  if (type === "status") {
+    statusSettings.splice(index, 1);
+    renderStatusSettings();
+  }
+  if (type === "category") {
+    categoryOptions.splice(index, 1);
+    renderCategorySettings();
+  }
+}
+
+async function saveSettings() {
+  els.saveSettings.disabled = true;
+  const originalText = els.saveSettings.textContent;
+  els.saveSettings.textContent = "Saving";
+
+  try {
+    const result = await apiRequest("action=save-settings", {
+      method: "POST",
+      body: JSON.stringify({
+        priorities: prioritySettings,
+        statuses: statusSettings,
+        categories: categoryOptions,
+      }),
+    });
+    applySettings(result.settings || {});
+    renderFilterOptions();
+    renderAssigneeOptions();
+    renderSettings();
+    renderDashboard();
+    renderReports();
+    updateMetrics();
+  } catch (error) {
+    alert(error.message || "Settings could not be saved.");
+    console.error(error);
+  } finally {
+    els.saveSettings.disabled = false;
+    els.saveSettings.textContent = originalText;
+  }
+}
+
+async function saveNewUser(event) {
+  event.preventDefault();
+  try {
+    const result = await apiRequest("action=save-user", {
+      method: "POST",
+      body: JSON.stringify({
+        name: els.newUserName.value.trim(),
+        email: els.newUserEmail.value.trim(),
+        role: els.newUserRole.value,
+        temporaryPassword: els.newUserPassword.value,
+        isTech: els.newUserIsTech.checked,
+        active: true,
+      }),
+    });
+    users = result.users || users;
+    els.addUserForm.reset();
+    els.newUserIsTech.checked = true;
+    renderUsers();
+    renderAssigneeOptions();
+    renderUserSettings();
+  } catch (error) {
+    alert(error.message || "User could not be saved.");
+    console.error(error);
+  }
+}
+
+async function saveUserFromEvent(event) {
+  const button = event.target.closest("[data-save-user]");
+  if (!button) return;
+  const row = button.closest(".setting-row");
+  const user = collectUserRow(row);
+  button.disabled = true;
+  try {
+    const result = await apiRequest("action=save-user", {
+      method: "POST",
+      body: JSON.stringify(user),
+    });
+    users = result.users || users;
+    renderUsers();
+    renderAssigneeOptions();
+    renderUserSettings();
+  } catch (error) {
+    alert(error.message || "User could not be saved.");
+    console.error(error);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function collectUserRow(row) {
+  const user = { id: Number(row.dataset.userId) };
+  row.querySelectorAll("[data-user-field]").forEach((field) => {
+    const key = field.dataset.userField;
+    user[key] = field.type === "checkbox" ? field.checked : field.value.trim();
+  });
+  return user;
+}
+
 function renderDashboard() {
   els.dashboardTypeSummary.innerHTML = typeNames.slice(1).map((type) => {
     const count = tickets.filter((ticket) => ticket.type === type).length;
@@ -999,6 +1330,11 @@ function renderDashboard() {
     { name: "Waiting", statuses: ["Waiting on Customer", "User Responded", "Pending Vendor", "On Hold"] },
     { name: "Done", statuses: resolvedStatuses },
   ];
+  const assignedStatuses = new Set(columns.flatMap((column) => column.statuses));
+  const otherStatuses = statusOptions.filter((status) => !assignedStatuses.has(status));
+  if (otherStatuses.length) {
+    columns.splice(3, 0, { name: "Other", statuses: otherStatuses });
+  }
 
   els.dashboardBoard.innerHTML = columns.map((column) => {
     const columnTickets = tickets.filter((ticket) => column.statuses.includes(ticket.status)).slice(0, 4);
@@ -1021,7 +1357,8 @@ function renderDashboard() {
 }
 
 function renderUsers() {
-  els.userList.innerHTML = users.map((user) => `
+  const activeUsers = users.filter((user) => user.active !== false);
+  els.userList.innerHTML = activeUsers.map((user) => `
     <article class="user-row">
       <div class="user-avatar">${escapeHtml(user.name.split(" ").map((part) => part[0]).join(""))}</div>
       <div>
@@ -1053,7 +1390,12 @@ function renderDashboardCard(ticket) {
 }
 
 function priorityRank(priority) {
-  return { "P1-Highest": 1, "P2-High": 2, "P3-Medium": 3, "P4-Normal": 4, "P5-Low": 5 }[priority] || 9;
+  const index = priorityOptions.indexOf(priority);
+  return index === -1 ? 999 : index + 1;
+}
+
+function highPriorityOptions() {
+  return priorityOptions.slice(0, Math.min(2, priorityOptions.length));
 }
 
 function getTicketAge(ticket) {

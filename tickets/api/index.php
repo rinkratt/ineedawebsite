@@ -3,9 +3,80 @@ declare(strict_types=1);
 
 require __DIR__ . '/bootstrap.php';
 
+function trim_to_limit(mixed $value, int $limit): string
+{
+    $text = trim((string) $value);
+    if (function_exists('mb_substr')) {
+        return mb_substr($text, 0, $limit);
+    }
+    return substr($text, 0, $limit);
+}
+
+function normalize_named_settings(array $rows, int $limit, bool $includeResolved = false): array
+{
+    $normalized = [];
+    $seen = [];
+
+    foreach ($rows as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+
+        $label = trim_to_limit($row['label'] ?? '', $limit);
+        $key = strtolower($label);
+        if ($label === '' || isset($seen[$key])) {
+            continue;
+        }
+
+        $seen[$key] = true;
+        $item = [
+            'label' => $label,
+            'active' => !empty($row['active']),
+        ];
+        if ($includeResolved) {
+            $item['isResolved'] = !empty($row['isResolved']);
+        }
+        $normalized[] = $item;
+    }
+
+    return $normalized;
+}
+
+function normalize_category_settings(array $rows): array
+{
+    $normalized = [];
+    $seen = [];
+
+    foreach ($rows as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+
+        $category = trim_to_limit($row['category'] ?? '', 100);
+        $subCategory = trim_to_limit($row['subCategory'] ?? $row['sub_category'] ?? '', 100);
+        $thirdCategory = trim_to_limit($row['thirdCategory'] ?? $row['third_category'] ?? '', 100);
+        $key = strtolower($category . "\n" . $subCategory . "\n" . $thirdCategory);
+        if ($category === '' || $subCategory === '' || isset($seen[$key])) {
+            continue;
+        }
+
+        $seen[$key] = true;
+        $normalized[] = [
+            'sysAidId' => isset($row['sysAidId']) && $row['sysAidId'] !== '' ? (int) $row['sysAidId'] : null,
+            'category' => $category,
+            'subCategory' => $subCategory,
+            'thirdCategory' => $thirdCategory,
+            'active' => !empty($row['active']),
+        ];
+    }
+
+    return $normalized;
+}
+
 try {
     $pdo = db();
     ensure_auth_schema($pdo);
+    ensure_settings_schema($pdo);
     $action = $_GET['action'] ?? 'bootstrap';
 
     if ($action === 'login') {
@@ -17,7 +88,7 @@ try {
             json_response(['error' => 'Email and password are required'], 400);
         }
 
-        $stmt = $pdo->prepare('SELECT id, name, email, role, password_hash, password_reset_required FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1');
+        $stmt = $pdo->prepare('SELECT id, name, email, role, active, is_tech, password_hash, password_reset_required FROM users WHERE LOWER(email) = LOWER(?) AND active = 1 LIMIT 1');
         $stmt->execute([$email]);
         $user = $stmt->fetch();
         $hash = is_array($user) ? (string) ($user['password_hash'] ?? '') : '';
@@ -49,7 +120,7 @@ try {
             json_response(['error' => 'Use at least 10 characters'], 400);
         }
 
-        $stmt = $pdo->prepare('SELECT id, name, email, role, password_hash, password_reset_required FROM users WHERE id = ? LIMIT 1');
+        $stmt = $pdo->prepare('SELECT id, name, email, role, active, is_tech, password_hash, password_reset_required FROM users WHERE id = ? LIMIT 1');
         $stmt->execute([(int) $currentUser['id']]);
         $user = $stmt->fetch();
         if (!$user || !password_verify($currentPassword, (string) ($user['password_hash'] ?? ''))) {
@@ -59,7 +130,7 @@ try {
         $newHash = password_hash($newPassword, PASSWORD_DEFAULT);
         $pdo->prepare('UPDATE users SET password_hash = ?, password_reset_required = 0 WHERE id = ?')->execute([$newHash, (int) $user['id']]);
 
-        $stmt = $pdo->prepare('SELECT id, name, email, role, password_reset_required FROM users WHERE id = ? LIMIT 1');
+        $stmt = $pdo->prepare('SELECT id, name, email, role, active, is_tech, password_reset_required FROM users WHERE id = ? LIMIT 1');
         $stmt->execute([(int) $user['id']]);
         $updatedUser = $stmt->fetch();
         if (!$updatedUser) {
@@ -74,10 +145,10 @@ try {
 
     if ($action === 'bootstrap') {
         if (!empty($currentUser['password_reset_required'])) {
-            json_response(['currentUser' => public_user($currentUser), 'users' => [], 'tickets' => []]);
+            json_response(['currentUser' => public_user($currentUser), 'users' => [], 'tickets' => [], 'settings' => settings_payload($pdo)]);
         }
 
-        $users = $pdo->query('SELECT id, name, email, role FROM users ORDER BY id')->fetchAll();
+        $users = users_payload($pdo);
         $ticketRows = $pdo->query('SELECT * FROM tickets ORDER BY id DESC')->fetchAll();
         $tickets = array_map('db_ticket_to_api', $ticketRows);
 
@@ -96,7 +167,114 @@ try {
             }
         }
 
-        json_response(['currentUser' => public_user($currentUser), 'users' => $users, 'tickets' => $tickets]);
+        json_response(['currentUser' => public_user($currentUser), 'users' => $users, 'tickets' => $tickets, 'settings' => settings_payload($pdo)]);
+    }
+
+    if ($action === 'save-settings') {
+        require_admin($currentUser);
+        $body = read_json_body();
+        $priorities = normalize_named_settings($body['priorities'] ?? [], 60);
+        $statuses = normalize_named_settings($body['statuses'] ?? [], 80, true);
+        $categories = normalize_category_settings($body['categories'] ?? []);
+
+        if (!$priorities || !$statuses || !$categories) {
+            json_response(['error' => 'Priorities, statuses, and categories each need at least one valid row.'], 400);
+        }
+        if (!array_filter($priorities, static fn (array $item): bool => !empty($item['active']))
+            || !array_filter($statuses, static fn (array $item): bool => !empty($item['active']))
+            || !array_filter($categories, static fn (array $item): bool => !empty($item['active']))) {
+            json_response(['error' => 'Each settings list needs at least one active option.'], 400);
+        }
+
+        $pdo->beginTransaction();
+        try {
+            $pdo->exec('DELETE FROM ticket_priorities');
+            $priorityStmt = $pdo->prepare('INSERT INTO ticket_priorities (label, sort_order, active) VALUES (?, ?, ?)');
+            foreach ($priorities as $index => $priority) {
+                $priorityStmt->execute([$priority['label'], $index + 1, $priority['active'] ? 1 : 0]);
+            }
+
+            $pdo->exec('DELETE FROM ticket_statuses');
+            $statusStmt = $pdo->prepare('INSERT INTO ticket_statuses (label, sort_order, active, is_resolved) VALUES (?, ?, ?, ?)');
+            foreach ($statuses as $index => $status) {
+                $statusStmt->execute([$status['label'], $index + 1, $status['active'] ? 1 : 0, !empty($status['isResolved']) ? 1 : 0]);
+            }
+
+            $pdo->exec('DELETE FROM ticket_categories');
+            $categoryStmt = $pdo->prepare('INSERT INTO ticket_categories (sysaid_id, category, sub_category, third_category, sort_order, active) VALUES (?, ?, ?, ?, ?, ?)');
+            foreach ($categories as $index => $category) {
+                $categoryStmt->execute([
+                    $category['sysAidId'],
+                    $category['category'],
+                    $category['subCategory'],
+                    $category['thirdCategory'],
+                    $index + 1,
+                    $category['active'] ? 1 : 0,
+                ]);
+            }
+            $pdo->commit();
+        } catch (Throwable $error) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $error;
+        }
+
+        json_response(['settings' => settings_payload($pdo)]);
+    }
+
+    if ($action === 'save-user') {
+        require_admin($currentUser);
+        $body = read_json_body();
+        $id = isset($body['id']) && $body['id'] ? (int) $body['id'] : null;
+        $name = trim_to_limit($body['name'] ?? '', 120);
+        $email = strtolower(trim_to_limit($body['email'] ?? '', 190));
+        $role = trim_to_limit($body['role'] ?? 'Tier 1 Tech', 80);
+        $active = !empty($body['active']);
+        $isTech = !empty($body['isTech']);
+        $temporaryPassword = (string) ($body['temporaryPassword'] ?? '');
+
+        if ($name === '' || $email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            json_response(['error' => 'A valid name and email are required.'], 400);
+        }
+        if ($id && $id === (int) $currentUser['id'] && !$active) {
+            json_response(['error' => 'You cannot deactivate your own account.'], 400);
+        }
+        if (!$id && strlen($temporaryPassword) < 10) {
+            json_response(['error' => 'New users need a temporary password of at least 10 characters.'], 400);
+        }
+        if ($temporaryPassword !== '' && strlen($temporaryPassword) < 10) {
+            json_response(['error' => 'Temporary passwords must be at least 10 characters.'], 400);
+        }
+
+        $duplicate = $pdo->prepare('SELECT id FROM users WHERE LOWER(email) = LOWER(?) AND (? IS NULL OR id <> ?) LIMIT 1');
+        $duplicate->execute([$email, $id, $id]);
+        if ($duplicate->fetch()) {
+            json_response(['error' => 'That email address is already in use.'], 400);
+        }
+
+        if ($id) {
+            $fields = [
+                'name' => $name,
+                'email' => $email,
+                'role' => $role,
+                'active' => $active ? 1 : 0,
+                'is_tech' => $isTech ? 1 : 0,
+                'id' => $id,
+            ];
+            $sql = 'UPDATE users SET name = :name, email = :email, role = :role, active = :active, is_tech = :is_tech';
+            if ($temporaryPassword !== '') {
+                $sql .= ', password_hash = :password_hash, password_reset_required = 1';
+                $fields['password_hash'] = password_hash($temporaryPassword, PASSWORD_DEFAULT);
+            }
+            $sql .= ' WHERE id = :id';
+            $pdo->prepare($sql)->execute($fields);
+        } else {
+            $stmt = $pdo->prepare('INSERT INTO users (name, email, role, active, is_tech, password_hash, password_reset_required) VALUES (?, ?, ?, ?, ?, ?, 1)');
+            $stmt->execute([$name, $email, $role, $active ? 1 : 0, $isTech ? 1 : 0, password_hash($temporaryPassword, PASSWORD_DEFAULT)]);
+        }
+
+        json_response(['users' => users_payload($pdo)]);
     }
 
     if ($action === 'save-ticket') {
@@ -107,6 +285,11 @@ try {
             json_response(['error' => 'Ticket title is required'], 400);
         }
 
+        $assignee = trim((string) ($body['assignee'] ?? ''));
+        if ($assignee !== '' && !in_array($assignee, tech_names($pdo), true)) {
+            json_response(['error' => 'Tickets can only be assigned to active technicians.'], 400);
+        }
+
         $fields = [
             'type' => $body['type'] ?? 'Request',
             'title' => $title,
@@ -115,7 +298,7 @@ try {
             'request_time' => date('Y-m-d H:i:s', strtotime((string) ($body['requestTime'] ?? 'now'))),
             'request_user' => $body['requestUser'] ?? 'Kelly Cox',
             'priority' => $body['priority'] ?? 'P5-Low',
-            'assignee' => $body['assignee'] ?? '',
+            'assignee' => $assignee,
             'category' => $body['category'] ?? 'Application',
             'sub_category' => $body['subCategory'] ?? 'Ticket System',
             'third_category' => $body['thirdCategory'] ?? 'General',

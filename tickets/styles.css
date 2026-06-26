@@ -241,6 +241,7 @@ h3 {
 .tickets-view,
 .reports-view,
 .ai-chat-view,
+.settings-view,
 .ticket-detail {
   display: grid;
   gap: 22px;
@@ -253,6 +254,7 @@ h3 {
 .tickets-view[hidden],
 .reports-view[hidden],
 .ai-chat-view[hidden],
+.settings-view[hidden],
 .ticket-detail[hidden],
 .filter-panel[hidden],
 .compose-panel[hidden] {
@@ -384,6 +386,7 @@ h3 {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
 }
 
 .type-summary,
@@ -465,7 +468,7 @@ h3 {
 
 .board {
   display: grid;
-  grid-template-columns: repeat(4, minmax(230px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
   gap: 14px;
   align-items: start;
 }
@@ -625,7 +628,11 @@ label {
 label input,
 label select,
 label textarea,
-.title-input {
+.title-input,
+.settings-form input,
+.settings-form select,
+.settings-actions input,
+.setting-input {
   width: 100%;
   min-width: 0;
   border: 1px solid var(--line);
@@ -633,6 +640,87 @@ label textarea,
   padding: 10px 12px;
   color: var(--ink);
   background: var(--panel);
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.8fr) minmax(280px, 0.8fr) minmax(380px, 1.4fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.settings-panel {
+  align-content: start;
+}
+
+.settings-actions,
+.settings-form {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-actions {
+  min-width: min(430px, 100%);
+}
+
+.settings-form {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 150px 170px auto auto;
+}
+
+.settings-list {
+  display: grid;
+  gap: 8px;
+}
+
+.compact-settings-list {
+  max-height: 420px;
+  overflow: auto;
+}
+
+.category-settings-list {
+  max-height: min(560px, 62vh);
+  overflow: auto;
+}
+
+.setting-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+  background: #fbfbfc;
+}
+
+.status-setting-row {
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+}
+
+.category-setting-row {
+  grid-template-columns: minmax(140px, 1fr) minmax(150px, 1fr) minmax(150px, 1fr) auto auto;
+}
+
+.user-setting-row {
+  grid-template-columns: minmax(140px, 1fr) minmax(190px, 1.2fr) minmax(130px, 0.8fr) minmax(160px, 0.8fr) auto auto auto;
+}
+
+.check-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.check-label input {
+  width: auto;
+  min-width: 0;
+  margin: 0;
 }
 
 .table-wrap {
@@ -1251,6 +1339,15 @@ dd {
     grid-template-columns: repeat(2, minmax(240px, 1fr));
   }
 
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-form,
+  .user-setting-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .queue-header,
   .queue-tools {
     align-items: stretch;
@@ -1284,8 +1381,19 @@ dd {
   .report-row,
   .chat-form,
   .ai-grid,
-  .detail-grid {
+  .detail-grid,
+  .settings-form,
+  .setting-row,
+  .status-setting-row,
+  .category-setting-row,
+  .user-setting-row {
     grid-template-columns: 1fr;
+  }
+
+  .settings-actions {
+    align-items: stretch;
+    flex-direction: column;
+    min-width: 0;
   }
 
   .quick-filters {

@@ -15,10 +15,13 @@ try {
             password_hash VARCHAR(255) NULL,
             password_reset_required TINYINT(1) NOT NULL DEFAULT 0,
             last_login_at DATETIME NULL,
+            active TINYINT(1) NOT NULL DEFAULT 1,
+            is_tech TINYINT(1) NOT NULL DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
     ensure_auth_schema($pdo);
+    ensure_settings_schema($pdo);
 
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS tickets (
@@ -87,7 +90,7 @@ try {
         ['Matt Arnold', 'Matt.Arnold@ineedawebsite.us', 'Tier 2 Tech'],
         ['Larsen Vallecillo', 'Larsen.Vallecillo@ineedawebsite.us', 'Tier 2 Tech'],
     ];
-    $userStmt = $pdo->prepare('INSERT INTO users (name, email, role) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name), role = VALUES(role)');
+    $userStmt = $pdo->prepare('INSERT INTO users (name, email, role, active, is_tech) VALUES (?, ?, ?, 1, 1) ON DUPLICATE KEY UPDATE name = VALUES(name), role = VALUES(role), active = 1, is_tech = 1');
     foreach ($users as $user) {
         $userStmt->execute($user);
     }

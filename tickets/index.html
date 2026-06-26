@@ -6,7 +6,7 @@
     <title>Ticket System</title>
     <link rel="icon" href="/favicon.ico?v=ineedawebsite-20260621" type="image/x-icon" sizes="any" />
     <link rel="shortcut icon" href="/favicon.ico?v=ineedawebsite-20260621" type="image/x-icon" />
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=20260626-admin" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -85,6 +85,10 @@
           <button class="nav-item" id="aiChatNav" type="button" data-view="ai-chat">
             <span aria-hidden="true">AI</span>
             <span>AI Chat</span>
+          </button>
+          <button class="nav-item" id="settingsNav" type="button" data-view="settings">
+            <span aria-hidden="true">SET</span>
+            <span>Settings</span>
           </button>
         </nav>
 
@@ -359,6 +363,77 @@
           </section>
         </section>
 
+        <section class="settings-view" id="settingsView" hidden>
+          <header class="topbar">
+            <div>
+              <p class="eyebrow">Administration</p>
+              <h2>Settings</h2>
+            </div>
+            <button class="primary-button" id="saveSettingsButton" type="button">Save Lists</button>
+          </header>
+
+          <section class="settings-grid" aria-label="Ticket settings">
+            <article class="panel settings-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Queue</p>
+                  <h3>Priorities</h3>
+                </div>
+                <button class="secondary-button" id="addPriorityButton" type="button">Add</button>
+              </div>
+              <div class="settings-list compact-settings-list" id="prioritySettingsList"></div>
+            </article>
+
+            <article class="panel settings-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Queue</p>
+                  <h3>Statuses</h3>
+                </div>
+                <button class="secondary-button" id="addStatusButton" type="button">Add</button>
+              </div>
+              <div class="settings-list compact-settings-list" id="statusSettingsList"></div>
+            </article>
+
+            <article class="panel settings-panel tech-settings-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Team</p>
+                  <h3>Technicians</h3>
+                </div>
+              </div>
+              <form class="settings-form" id="addUserForm">
+                <input id="newUserName" placeholder="Name" required />
+                <input id="newUserEmail" type="email" placeholder="Email" required />
+                <select id="newUserRole">
+                  <option>Tier 1 Tech</option>
+                  <option>Tier 2 Tech</option>
+                  <option>Admin</option>
+                  <option>End User</option>
+                </select>
+                <input id="newUserPassword" type="password" placeholder="Temporary password" minlength="10" required />
+                <label class="check-label"><input id="newUserIsTech" type="checkbox" checked /> Tech</label>
+                <button class="secondary-button" type="submit">Add</button>
+              </form>
+              <div class="settings-list user-settings-list" id="userSettingsList"></div>
+            </article>
+          </section>
+
+          <section class="panel settings-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">SysAid</p>
+                <h3>Categories</h3>
+              </div>
+              <div class="settings-actions">
+                <input id="categorySettingsSearch" type="search" placeholder="Search categories" />
+                <button class="secondary-button" id="addCategoryButton" type="button">Add</button>
+              </div>
+            </div>
+            <div class="settings-list category-settings-list" id="categorySettingsList"></div>
+          </section>
+        </section>
+
         <section class="ticket-detail" id="detailView" hidden>
           <header class="detail-header">
             <button class="ghost-icon" id="backButton" type="button" title="Go back" aria-label="Go back">‹</button>
@@ -455,7 +530,9 @@
           </label>
           <label>
             Assignee
-            <input id="assigneeInput" placeholder="Unassigned" />
+            <select id="assigneeInput">
+              <option value="">Unassigned</option>
+            </select>
           </label>
           <label>
             Status
@@ -523,6 +600,6 @@
     </aside>
 
     <script src="categories.js?v=20260626"></script>
-    <script src="app.js?v=20260626"></script>
+    <script src="app.js?v=20260626-admin"></script>
   </body>
 </html>

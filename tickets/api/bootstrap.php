@@ -81,11 +81,16 @@ function db(): PDO
     return $pdo;
 }
 
-function users_table_has_column(PDO $pdo, string $column): bool
+function table_has_column(PDO $pdo, string $table, string $column): bool
 {
-    $stmt = $pdo->prepare('SHOW COLUMNS FROM users LIKE ?');
+    $stmt = $pdo->prepare("SHOW COLUMNS FROM {$table} LIKE ?");
     $stmt->execute([$column]);
     return (bool) $stmt->fetch();
+}
+
+function users_table_has_column(PDO $pdo, string $column): bool
+{
+    return table_has_column($pdo, 'users', $column);
 }
 
 function ensure_auth_schema(PDO $pdo): void
@@ -104,8 +109,137 @@ function ensure_auth_schema(PDO $pdo): void
     if (!users_table_has_column($pdo, 'last_login_at')) {
         $pdo->exec('ALTER TABLE users ADD COLUMN last_login_at DATETIME NULL');
     }
+    if (!users_table_has_column($pdo, 'active')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN active TINYINT(1) NOT NULL DEFAULT 1');
+    }
+    if (!users_table_has_column($pdo, 'is_tech')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN is_tech TINYINT(1) NOT NULL DEFAULT 1');
+    }
 
     $checked = true;
+}
+
+function ensure_settings_schema(PDO $pdo): void
+{
+    static $checked = false;
+    if ($checked) {
+        return;
+    }
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS ticket_priorities (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            label VARCHAR(60) NOT NULL UNIQUE,
+            sort_order INT NOT NULL DEFAULT 0,
+            active TINYINT(1) NOT NULL DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS ticket_statuses (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            label VARCHAR(80) NOT NULL UNIQUE,
+            sort_order INT NOT NULL DEFAULT 0,
+            active TINYINT(1) NOT NULL DEFAULT 1,
+            is_resolved TINYINT(1) NOT NULL DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS ticket_categories (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            sysaid_id INT NULL,
+            category VARCHAR(100) NOT NULL DEFAULT '',
+            sub_category VARCHAR(100) NOT NULL DEFAULT '',
+            third_category VARCHAR(100) NOT NULL DEFAULT '',
+            sort_order INT NOT NULL DEFAULT 0,
+            active TINYINT(1) NOT NULL DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_ticket_category_sort (sort_order, id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
+    seed_ticket_priorities($pdo);
+    seed_ticket_statuses($pdo);
+    seed_ticket_categories($pdo);
+
+    $checked = true;
+}
+
+function seed_ticket_priorities(PDO $pdo): void
+{
+    if ((int) $pdo->query('SELECT COUNT(*) FROM ticket_priorities')->fetchColumn() > 0) {
+        return;
+    }
+
+    $labels = ['P1-Highest', 'P2-High', 'P3-Medium', 'P4-Normal', 'P5-Low'];
+    $stmt = $pdo->prepare('INSERT INTO ticket_priorities (label, sort_order, active) VALUES (?, ?, 1)');
+    foreach ($labels as $index => $label) {
+        $stmt->execute([$label, $index + 1]);
+    }
+}
+
+function seed_ticket_statuses(PDO $pdo): void
+{
+    if ((int) $pdo->query('SELECT COUNT(*) FROM ticket_statuses')->fetchColumn() > 0) {
+        return;
+    }
+
+    $labels = ['New', 'Open', 'In Progress', 'Escalated', 'Waiting on Customer', 'User Responded', 'Pending Vendor', 'On Hold', 'Resolved', 'Closed', 'Cancelled'];
+    $resolved = ['Resolved' => true, 'Closed' => true, 'Cancelled' => true];
+    $stmt = $pdo->prepare('INSERT INTO ticket_statuses (label, sort_order, active, is_resolved) VALUES (?, ?, 1, ?)');
+    foreach ($labels as $index => $label) {
+        $stmt->execute([$label, $index + 1, isset($resolved[$label]) ? 1 : 0]);
+    }
+}
+
+function seed_ticket_categories(PDO $pdo): void
+{
+    if ((int) $pdo->query('SELECT COUNT(*) FROM ticket_categories')->fetchColumn() > 0) {
+        return;
+    }
+
+    $categories = categories_seed_from_file();
+    if (!$categories) {
+        $categories = [
+            ['category' => 'Application', 'subCategory' => 'Ticket System', 'thirdCategory' => 'General'],
+            ['category' => 'Hardware', 'subCategory' => 'Device', 'thirdCategory' => 'General'],
+            ['category' => 'Account', 'subCategory' => 'Access', 'thirdCategory' => 'General'],
+            ['category' => 'Access', 'subCategory' => 'Account Access', 'thirdCategory' => 'Cannot log on'],
+        ];
+    }
+
+    $stmt = $pdo->prepare('
+        INSERT INTO ticket_categories (sysaid_id, category, sub_category, third_category, sort_order, active)
+        VALUES (?, ?, ?, ?, ?, 1)
+    ');
+    foreach ($categories as $index => $category) {
+        $stmt->execute([
+            isset($category['id']) ? (int) $category['id'] : null,
+            trim((string) ($category['category'] ?? '')),
+            trim((string) ($category['subCategory'] ?? $category['sub_category'] ?? '')),
+            trim((string) ($category['thirdCategory'] ?? $category['third_category'] ?? '')),
+            $index + 1,
+        ]);
+    }
+}
+
+function categories_seed_from_file(): array
+{
+    $path = dirname(__DIR__) . '/categories.js';
+    if (!is_file($path)) {
+        return [];
+    }
+
+    $contents = file_get_contents($path);
+    if (!is_string($contents) || !preg_match('/window\.ticketCategories\s*=\s*(\[.*\]);\s*$/s', $contents, $matches)) {
+        return [];
+    }
+
+    $data = json_decode($matches[1], true);
+    return is_array($data) ? $data : [];
 }
 
 function public_user(array $user): array
@@ -115,6 +249,8 @@ function public_user(array $user): array
         'name' => (string) $user['name'],
         'email' => (string) $user['email'],
         'role' => (string) $user['role'],
+        'active' => !isset($user['active']) || !empty($user['active']),
+        'isTech' => !isset($user['is_tech']) || !empty($user['is_tech']),
         'passwordResetRequired' => !empty($user['password_reset_required']),
     ];
 }
@@ -125,7 +261,7 @@ function current_user(PDO $pdo): ?array
         return null;
     }
 
-    $stmt = $pdo->prepare('SELECT id, name, email, role, password_reset_required FROM users WHERE id = ? LIMIT 1');
+    $stmt = $pdo->prepare('SELECT id, name, email, role, active, is_tech, password_reset_required FROM users WHERE id = ? AND active = 1 LIMIT 1');
     $stmt->execute([(int) $_SESSION['ticket_user_id']]);
     $user = $stmt->fetch();
     return $user ?: null;
@@ -188,6 +324,64 @@ function fetch_ticket(PDO $pdo, int $id): array
     $activity->execute([$id]);
     $apiTicket['journey'] = $activity->fetchAll();
     return $apiTicket;
+}
+
+function settings_payload(PDO $pdo): array
+{
+    return [
+        'priorities' => array_map(static function (array $priority): array {
+            return [
+                'id' => (int) $priority['id'],
+                'label' => (string) $priority['label'],
+                'sortOrder' => (int) $priority['sort_order'],
+                'active' => !empty($priority['active']),
+            ];
+        }, $pdo->query('SELECT id, label, sort_order, active FROM ticket_priorities ORDER BY sort_order, id')->fetchAll()),
+        'statuses' => array_map(static function (array $status): array {
+            return [
+                'id' => (int) $status['id'],
+                'label' => (string) $status['label'],
+                'sortOrder' => (int) $status['sort_order'],
+                'active' => !empty($status['active']),
+                'isResolved' => !empty($status['is_resolved']),
+            ];
+        }, $pdo->query('SELECT id, label, sort_order, active, is_resolved FROM ticket_statuses ORDER BY sort_order, id')->fetchAll()),
+        'categories' => array_map(static function (array $category): array {
+            return [
+                'id' => (int) $category['id'],
+                'sysAidId' => isset($category['sysaid_id']) ? (int) $category['sysaid_id'] : null,
+                'category' => (string) $category['category'],
+                'subCategory' => (string) $category['sub_category'],
+                'thirdCategory' => (string) $category['third_category'],
+                'sortOrder' => (int) $category['sort_order'],
+                'active' => !empty($category['active']),
+            ];
+        }, $pdo->query('SELECT id, sysaid_id, category, sub_category, third_category, sort_order, active FROM ticket_categories ORDER BY sort_order, id')->fetchAll()),
+    ];
+}
+
+function users_payload(PDO $pdo): array
+{
+    $users = $pdo->query('SELECT id, name, email, role, active, is_tech, password_reset_required FROM users ORDER BY active DESC, name')->fetchAll();
+    return array_map('public_user', $users);
+}
+
+function is_admin_user(array $user): bool
+{
+    return stripos((string) ($user['role'] ?? ''), 'admin') !== false;
+}
+
+function require_admin(array $user): void
+{
+    if (!is_admin_user($user)) {
+        json_response(['error' => 'Admin access required'], 403);
+    }
+}
+
+function tech_names(PDO $pdo): array
+{
+    $rows = $pdo->query('SELECT name FROM users WHERE active = 1 AND is_tech = 1 ORDER BY name')->fetchAll();
+    return array_map(static fn (array $row): string => (string) $row['name'], $rows);
 }
 
 function openai_api_key(): string
