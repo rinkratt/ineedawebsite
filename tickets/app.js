@@ -5,6 +5,14 @@ const priorityOptions = ["P1-Highest", "P2-High", "P3-Medium", "P4-Normal", "P5-
 const statusOptions = ["New", "Open", "In Progress", "Escalated", "Waiting on Customer", "User Responded", "Pending Vendor", "On Hold", "Resolved", "Closed", "Cancelled"];
 const resolvedStatuses = ["Resolved", "Closed", "Cancelled"];
 const responseStatuses = ["New", "Open", "Escalated", "User Responded"];
+const categoryKeySeparator = "|||";
+const fallbackCategories = [
+  { id: "fallback-application", category: "Application", subCategory: "Ticket System", thirdCategory: "General" },
+  { id: "fallback-hardware", category: "Hardware", subCategory: "Device", thirdCategory: "General" },
+  { id: "fallback-account", category: "Account", subCategory: "Access", thirdCategory: "General" },
+  { id: "fallback-access", category: "Access", subCategory: "Account Access", thirdCategory: "Cannot log on" },
+];
+const categoryOptions = (Array.isArray(window.ticketCategories) && window.ticketCategories.length ? window.ticketCategories : fallbackCategories).map(normalizeCategoryOption);
 
 const defaultUsers = [
   { id: 1, name: "Kelly Cox", email: "kelly.cox@ineedawebsite.us", role: "Admin" },
@@ -402,6 +410,61 @@ function renderSelectOptions(options, selected) {
   return options.map((option) => `<option value="${escapeHtml(option)}"${option === selected ? " selected" : ""}>${escapeHtml(option)}</option>`).join("");
 }
 
+function normalizeCategoryOption(option = {}) {
+  return {
+    id: option.id || "",
+    category: String(option.category || "Application"),
+    subCategory: String(option.subCategory || option.sub_category || ""),
+    thirdCategory: String(option.thirdCategory || option.third_category || ""),
+  };
+}
+
+function categoryOptionKey(option) {
+  const normalized = normalizeCategoryOption(option);
+  return [normalized.category, normalized.subCategory, normalized.thirdCategory].join(categoryKeySeparator);
+}
+
+function categoryOptionLabel(option) {
+  const normalized = normalizeCategoryOption(option);
+  return [normalized.category, normalized.subCategory, normalized.thirdCategory].filter(Boolean).join(" > ");
+}
+
+function categoryOptionFromKey(key) {
+  const [category, subCategory = "", thirdCategory = ""] = String(key || "").split(categoryKeySeparator);
+  return category ? normalizeCategoryOption({ category, subCategory, thirdCategory }) : null;
+}
+
+function categoryOptionFromTicket(ticket) {
+  const current = normalizeCategoryOption({
+    category: ticket?.category,
+    subCategory: ticket?.subCategory,
+    thirdCategory: ticket?.thirdCategory,
+  });
+  return categoryOptions.find((option) => categoryOptionKey(option) === categoryOptionKey(current)) || current;
+}
+
+function selectedCategoryOption() {
+  const selectedKey = els.categoryInput.value;
+  return categoryOptions.find((option) => categoryOptionKey(option) === selectedKey)
+    || categoryOptionFromKey(selectedKey)
+    || categoryOptions[0];
+}
+
+function renderCategoryOptions(selectedKey, currentCategory = null) {
+  const options = [...categoryOptions];
+  const current = currentCategory ? normalizeCategoryOption(currentCategory) : null;
+  if (current && !options.some((option) => categoryOptionKey(option) === categoryOptionKey(current))) {
+    options.unshift(current);
+  }
+  const fallbackKey = categoryOptionKey(options[0]);
+  const validSelectedKey = selectedKey && options.some((option) => categoryOptionKey(option) === selectedKey) ? selectedKey : fallbackKey;
+  els.categoryInput.innerHTML = options.map((option) => {
+    const key = categoryOptionKey(option);
+    return `<option value="${escapeHtml(key)}"${key === validSelectedKey ? " selected" : ""}>${escapeHtml(categoryOptionLabel(option))}</option>`;
+  }).join("");
+  els.categoryInput.value = validSelectedKey;
+}
+
 function getFilteredTickets() {
   const query = els.search.value.trim().toLowerCase();
   return tickets.filter((ticket) => {
@@ -714,13 +777,15 @@ function cleanCitationUrl(url) {
 }
 
 function openCompose(ticket = null) {
+  const selectedCategory = ticket ? categoryOptionFromTicket(ticket) : categoryOptions[0];
+  const selectedCategoryKey = categoryOptionKey(selectedCategory);
   els.composePanel.hidden = false;
   els.ticketId.value = ticket?.id || "";
   els.titleInput.value = ticket?.title || "DEFAULT";
   els.typeInput.value = ticket?.type || "Incident";
   els.templateInput.value = ticket?.template || "DEFAULT";
   els.priorityInput.value = priorityOptions.includes(ticket?.priority) ? ticket.priority : "P5-Low";
-  els.categoryInput.value = ticket?.category || "Application";
+  renderCategoryOptions(selectedCategoryKey, selectedCategory);
   els.assigneeInput.value = ticket?.assignee || "";
   els.statusInput.value = statusOptions.includes(ticket?.status) ? ticket.status : "New";
   els.descriptionInput.value = ticket?.description || "";
@@ -740,6 +805,7 @@ async function saveTicket(event) {
   event.preventDefault();
   const existingId = Number(els.ticketId.value);
   const existing = tickets.find((ticket) => ticket.id === existingId);
+  const category = selectedCategoryOption();
   const now = new Date().toISOString();
   const payload = {
     id: existingId || null,
@@ -751,9 +817,9 @@ async function saveTicket(event) {
     requestUser: els.requestUserInput.value.trim(),
     priority: els.priorityInput.value,
     assignee: els.assigneeInput.value.trim(),
-    category: els.categoryInput.value,
-    subCategory: existing?.subCategory || "Ticket System",
-    thirdCategory: existing?.thirdCategory || "General",
+    category: category.category,
+    subCategory: category.subCategory,
+    thirdCategory: category.thirdCategory,
     modifyUser: actorName(),
     description: els.descriptionInput.value.trim(),
     impact: els.impactInput.value,
