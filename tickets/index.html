@@ -9,7 +9,57 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="app-shell">
+    <section class="login-screen" id="loginScreen">
+      <div class="login-card" id="loginCard">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">TS</div>
+          <div>
+            <p class="eyebrow">Workspace</p>
+            <h1>Ticket System</h1>
+          </div>
+        </div>
+
+        <form class="login-form" id="loginForm">
+          <div>
+            <h2>Sign in</h2>
+            <p>Use your team account to open the help desk.</p>
+          </div>
+          <label>
+            Email
+            <input id="loginEmail" type="email" autocomplete="username" required />
+          </label>
+          <label>
+            Password
+            <input id="loginPassword" type="password" autocomplete="current-password" required />
+          </label>
+          <p class="form-error" id="loginError" role="alert"></p>
+          <button class="primary-button" type="submit">Sign In</button>
+        </form>
+
+        <form class="login-form" id="passwordChangeForm" hidden>
+          <div>
+            <h2>Set password</h2>
+            <p>Create your private password before entering the ticket system.</p>
+          </div>
+          <label>
+            Current password
+            <input id="currentPasswordInput" type="password" autocomplete="current-password" required />
+          </label>
+          <label>
+            New password
+            <input id="newPasswordInput" type="password" autocomplete="new-password" minlength="10" required />
+          </label>
+          <label>
+            Confirm password
+            <input id="confirmPasswordInput" type="password" autocomplete="new-password" minlength="10" required />
+          </label>
+          <p class="form-error" id="passwordChangeError" role="alert"></p>
+          <button class="primary-button" type="submit">Save Password</button>
+        </form>
+      </div>
+    </section>
+
+    <div class="app-shell" id="appShell" hidden>
       <aside class="sidebar" aria-label="Ticket system navigation">
         <div class="brand">
           <div class="brand-mark" aria-hidden="true">TS</div>
@@ -57,6 +107,14 @@
             <span>Resolved</span>
             <strong id="resolvedCount">0</strong>
           </div>
+        </div>
+
+        <div class="account-panel">
+          <div>
+            <span id="currentUserName">Signed in</span>
+            <small id="currentUserRole"></small>
+          </div>
+          <button class="secondary-button" id="logoutButton" type="button">Log Out</button>
         </div>
       </aside>
 
@@ -160,9 +218,16 @@
               <select id="statusFilter">
                 <option value="all">All statuses</option>
                 <option value="New">New</option>
+                <option value="Open">Open</option>
                 <option value="In Progress">In Progress</option>
+                <option value="Escalated">Escalated</option>
+                <option value="Waiting on Customer">Waiting on Customer</option>
                 <option value="User Responded">User Responded</option>
+                <option value="Pending Vendor">Pending Vendor</option>
+                <option value="On Hold">On Hold</option>
                 <option value="Resolved">Resolved</option>
+                <option value="Closed">Closed</option>
+                <option value="Cancelled">Cancelled</option>
               </select>
             </label>
             <label>
@@ -174,6 +239,8 @@
               <select id="priorityFilter">
                 <option value="all">All priorities</option>
                 <option value="P1-Highest">P1-Highest</option>
+                <option value="P2-High">P2-High</option>
+                <option value="P3-Medium">P3-Medium</option>
                 <option value="P4-Normal">P4-Normal</option>
                 <option value="P5-Low">P5-Low</option>
               </select>
@@ -238,7 +305,7 @@
               <strong id="reportActiveCount">0</strong>
             </article>
             <article class="metric">
-              <span>Resolved tickets</span>
+              <span>Done tickets</span>
               <strong id="reportResolvedCount">0</strong>
             </article>
             <article class="metric">
@@ -369,9 +436,11 @@
           <label>
             Priority
             <select id="priorityInput">
-              <option>P5-Low</option>
-              <option>P4-Normal</option>
               <option>P1-Highest</option>
+              <option>P2-High</option>
+              <option>P3-Medium</option>
+              <option>P4-Normal</option>
+              <option>P5-Low</option>
             </select>
           </label>
           <label>
@@ -391,9 +460,16 @@
             Status
             <select id="statusInput">
               <option>New</option>
+              <option>Open</option>
               <option>In Progress</option>
+              <option>Escalated</option>
+              <option>Waiting on Customer</option>
               <option>User Responded</option>
+              <option>Pending Vendor</option>
+              <option>On Hold</option>
               <option>Resolved</option>
+              <option>Closed</option>
+              <option>Cancelled</option>
             </select>
           </label>
         </div>

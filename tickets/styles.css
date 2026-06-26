@@ -36,6 +36,59 @@ button {
   cursor: pointer;
 }
 
+.login-screen {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+}
+
+.login-card {
+  display: grid;
+  width: min(440px, 100%);
+  gap: 22px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 28px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.login-form {
+  display: grid;
+  gap: 14px;
+}
+
+.login-form h2 {
+  margin-bottom: 6px;
+}
+
+.login-form p {
+  color: var(--muted);
+}
+
+.login-form label {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.login-form input {
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0 12px;
+  color: var(--ink);
+  background: var(--panel);
+}
+
+.form-error {
+  min-height: 20px;
+  color: var(--red-dark);
+  font-weight: 900;
+}
+
 .app-shell {
   display: grid;
   min-height: 100vh;
@@ -155,6 +208,27 @@ h3 {
   color: var(--ink);
 }
 
+.account-panel {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+
+.account-panel span,
+.account-panel small {
+  display: block;
+}
+
+.account-panel span {
+  font-weight: 900;
+}
+
+.account-panel small {
+  margin-top: 3px;
+  color: var(--muted);
+}
+
 .main-content {
   display: flex;
   flex-direction: column;
@@ -172,6 +246,9 @@ h3 {
   gap: 22px;
 }
 
+.app-shell[hidden],
+.login-screen[hidden],
+.login-form[hidden],
 .dashboard-view[hidden],
 .tickets-view[hidden],
 .reports-view[hidden],
@@ -1143,6 +1220,10 @@ dd {
   .sidebar-create,
   .sidebar-section {
     display: none;
+  }
+
+  .account-panel {
+    grid-column: 1 / -1;
   }
 
   .board {

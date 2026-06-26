@@ -1,6 +1,10 @@
 const API_URL = "api/index.php";
 
 const typeNames = ["All", "Incident", "Problem", "Request", "Change"];
+const priorityOptions = ["P1-Highest", "P2-High", "P3-Medium", "P4-Normal", "P5-Low"];
+const statusOptions = ["New", "Open", "In Progress", "Escalated", "Waiting on Customer", "User Responded", "Pending Vendor", "On Hold", "Resolved", "Closed", "Cancelled"];
+const resolvedStatuses = ["Resolved", "Closed", "Cancelled"];
+const responseStatuses = ["New", "Open", "Escalated", "User Responded"];
 
 const defaultUsers = [
   { id: 1, name: "Kelly Cox", email: "kelly.cox@ineedawebsite.us", role: "Admin" },
@@ -14,6 +18,7 @@ let activeType = "All";
 let activeTicketId = null;
 let activeDetailTab = "details";
 let activeView = "dashboard";
+let currentUser = null;
 const aiAssists = new Map();
 let aiChatBusy = false;
 const aiChatMessages = [
@@ -21,6 +26,20 @@ const aiChatMessages = [
 ];
 
 const els = {
+  appShell: document.querySelector("#appShell"),
+  loginScreen: document.querySelector("#loginScreen"),
+  loginForm: document.querySelector("#loginForm"),
+  loginEmail: document.querySelector("#loginEmail"),
+  loginPassword: document.querySelector("#loginPassword"),
+  loginError: document.querySelector("#loginError"),
+  passwordChangeForm: document.querySelector("#passwordChangeForm"),
+  currentPasswordInput: document.querySelector("#currentPasswordInput"),
+  newPasswordInput: document.querySelector("#newPasswordInput"),
+  confirmPasswordInput: document.querySelector("#confirmPasswordInput"),
+  passwordChangeError: document.querySelector("#passwordChangeError"),
+  currentUserName: document.querySelector("#currentUserName"),
+  currentUserRole: document.querySelector("#currentUserRole"),
+  logoutButton: document.querySelector("#logoutButton"),
   dashboardView: document.querySelector("#dashboardView"),
   ticketsView: document.querySelector("#ticketsView"),
   reportsView: document.querySelector("#reportsView"),
@@ -93,6 +112,9 @@ const els = {
   detailPanel: document.querySelector("#detailPanel"),
 };
 
+els.loginForm.addEventListener("submit", login);
+els.passwordChangeForm.addEventListener("submit", changePassword);
+els.logoutButton.addEventListener("click", logout);
 els.newTicket.addEventListener("click", () => openCompose());
 els.newTicketTop.addEventListener("click", () => openCompose());
 els.dashboardNav.addEventListener("click", () => switchView("dashboard"));
@@ -131,13 +153,23 @@ loadApp();
 async function loadApp() {
   try {
     const data = await apiRequest("action=bootstrap");
+    currentUser = data.currentUser || null;
     users = data.users?.length ? data.users : defaultUsers;
     tickets = Array.isArray(data.tickets) ? data.tickets.map(normalizeTicket) : [];
+    if (currentUser?.passwordResetRequired) {
+      showPasswordChange();
+      return;
+    }
+    showApp();
+    render();
   } catch (error) {
     console.error(error);
-    tickets = starterTickets();
+    if (error.status === 401) {
+      showLogin();
+      return;
+    }
+    showLogin("The ticket system could not be loaded. Please sign in again.");
   }
-  render();
 }
 
 async function apiRequest(query = "", options = {}) {
@@ -146,20 +178,123 @@ async function apiRequest(query = "", options = {}) {
     headers: { "Content-Type": "application/json" },
     ...options,
   });
-  const payload = await response.json();
+  let payload = {};
+  try {
+    payload = await response.json();
+  } catch {
+    payload = { error: "API request failed" };
+  }
   if (!response.ok || payload.error) {
-    throw new Error(payload.error || "API request failed");
+    const error = new Error(payload.error || "API request failed");
+    error.status = response.status;
+    throw error;
   }
   return payload;
+}
+
+async function login(event) {
+  event.preventDefault();
+  els.loginError.textContent = "";
+
+  try {
+    const result = await apiRequest("action=login", {
+      method: "POST",
+      body: JSON.stringify({
+        email: els.loginEmail.value.trim(),
+        password: els.loginPassword.value,
+      }),
+    });
+    currentUser = result.user;
+    els.loginPassword.value = "";
+    if (currentUser?.passwordResetRequired) {
+      showPasswordChange();
+      return;
+    }
+    await loadApp();
+  } catch (error) {
+    els.loginError.textContent = error.message || "Sign in failed.";
+  }
+}
+
+async function changePassword(event) {
+  event.preventDefault();
+  els.passwordChangeError.textContent = "";
+  const nextPassword = els.newPasswordInput.value;
+  const confirmPassword = els.confirmPasswordInput.value;
+
+  if (nextPassword.length < 10) {
+    els.passwordChangeError.textContent = "Use at least 10 characters.";
+    return;
+  }
+  if (nextPassword !== confirmPassword) {
+    els.passwordChangeError.textContent = "The new passwords do not match.";
+    return;
+  }
+
+  try {
+    const result = await apiRequest("action=change-password", {
+      method: "POST",
+      body: JSON.stringify({
+        currentPassword: els.currentPasswordInput.value,
+        newPassword: nextPassword,
+      }),
+    });
+    currentUser = result.user;
+    els.passwordChangeForm.reset();
+    await loadApp();
+  } catch (error) {
+    els.passwordChangeError.textContent = error.message || "Password could not be changed.";
+  }
+}
+
+async function logout() {
+  try {
+    await apiRequest("action=logout", { method: "POST", body: "{}" });
+  } catch (error) {
+    console.error(error);
+  }
+  currentUser = null;
+  tickets = [];
+  showLogin();
+}
+
+function showLogin(message = "") {
+  els.appShell.hidden = true;
+  els.loginScreen.hidden = false;
+  els.loginForm.hidden = false;
+  els.passwordChangeForm.hidden = true;
+  els.loginError.textContent = message;
+  els.loginPassword.value = "";
+  els.loginEmail.focus();
+}
+
+function showPasswordChange(message = "") {
+  els.appShell.hidden = true;
+  els.loginScreen.hidden = false;
+  els.loginForm.hidden = true;
+  els.passwordChangeForm.hidden = false;
+  els.passwordChangeError.textContent = message;
+  els.currentPasswordInput.focus();
+}
+
+function showApp() {
+  els.loginScreen.hidden = true;
+  els.appShell.hidden = false;
+  els.currentUserName.textContent = currentUser?.name || "Signed in";
+  els.currentUserRole.textContent = currentUser?.role || "";
+}
+
+function actorName() {
+  return currentUser?.name || "System";
 }
 
 function starterTickets() {
   const now = new Date();
   return [
     makeTicket(1006, "Request", "Add user directory and roles", "New", "Normal - Within a week", "Kelly Cox", "P4-Normal", "Kelly Cox", "Application", "Ticket System", "Users", "Kelly Cox", "Create the first internal users: admin plus Tier 2 technicians.", 0),
-    makeTicket(1005, "Request", "Build email intake plan", "New", "High - By the end of tomorrow", "Kelly Cox", "P1-Highest", "Matt Arnold", "Application", "Ticket System", "Email Intake", "Kelly Cox", "Plan how inbound support emails should become tickets with sender, subject, and message body mapped into service records.", 1),
-    makeTicket(1004, "Problem", "Local storage is temporary", "In Progress", "Normal - Within a week", "Kelly Cox", "P4-Normal", "Larsen Vallecillo", "Application", "Ticket System", "Data Storage", "Larsen Vallecillo", "Replace browser-only storage with the shared MySQL-backed API.", 2),
-    makeTicket(1003, "Change", "Deploy ticket system under /tickets", "Resolved", "Low - Not Urgent", "Kelly Cox", "P5-Low", "Kelly Cox", "Hosting", "Plesk", "Deployment", "Kelly Cox", "Publish the ticket prototype to ineedawebsite.us/tickets and verify the public URL after upload.", 3),
+    makeTicket(1005, "Request", "Build email intake plan", "Escalated", "High - By the end of tomorrow", "Kelly Cox", "P1-Highest", "Matt Arnold", "Application", "Ticket System", "Email Intake", "Kelly Cox", "Plan how inbound support emails should become tickets with sender, subject, and message body mapped into service records.", 1),
+    makeTicket(1004, "Problem", "Local storage is temporary", "In Progress", "Normal - Within a week", "Kelly Cox", "P3-Medium", "Larsen Vallecillo", "Application", "Ticket System", "Data Storage", "Larsen Vallecillo", "Replace browser-only storage with the shared MySQL-backed API.", 2),
+    makeTicket(1003, "Change", "Deploy ticket system under /tickets", "Closed", "Low - Not Urgent", "Kelly Cox", "P5-Low", "Kelly Cox", "Hosting", "Plesk", "Deployment", "Kelly Cox", "Publish the ticket prototype to ineedawebsite.us/tickets and verify the public URL after upload.", 3),
     makeTicket(1002, "Incident", "Mobile create button was hidden", "Resolved", "Low - Not Urgent", "Kelly Cox", "P5-Low", "Matt Arnold", "Interface", "Responsive", "Navigation", "Matt Arnold", "The sidebar create action disappeared on mobile. Add a visible New Ticket action in the top bar.", 4),
     makeTicket(1001, "Request", "Create branded dashboard", "In Progress", "Normal - Within a week", "Kelly Cox", "P4-Normal", "Larsen Vallecillo", "Interface", "Dashboard", "Branding", "Larsen Vallecillo", "Keep the original friendly dashboard style while showing the dense service-record table from the Tickets nav item.", 5),
   ];
@@ -200,11 +335,11 @@ function normalizeTicket(ticket) {
     id: Number(ticket.id),
     type: ticket.type || "Request",
     title: ticket.title || "Untitled ticket",
-    status: ticket.status || "New",
+    status: statusOptions.includes(ticket.status) ? ticket.status : "New",
     urgency: ticket.urgency || "Low - Not Urgent",
     requestTime: ticket.requestTime || ticket.request_time || new Date().toISOString(),
     requestUser: ticket.requestUser || ticket.request_user || "Kelly Cox",
-    priority: ticket.priority || "P5-Low",
+    priority: priorityOptions.includes(ticket.priority) ? ticket.priority : "P5-Low",
     assignee: ticket.assignee || "",
     category: ticket.category || "Application",
     subCategory: ticket.subCategory || ticket.sub_category || "Ticket System",
@@ -571,14 +706,14 @@ function openCompose(ticket = null) {
   els.titleInput.value = ticket?.title || "DEFAULT";
   els.typeInput.value = ticket?.type || "Incident";
   els.templateInput.value = ticket?.template || "DEFAULT";
-  els.priorityInput.value = ticket?.priority || "P5-Low";
+  els.priorityInput.value = priorityOptions.includes(ticket?.priority) ? ticket.priority : "P5-Low";
   els.categoryInput.value = ticket?.category || "Application";
   els.assigneeInput.value = ticket?.assignee || "";
-  els.statusInput.value = ticket?.status || "New";
+  els.statusInput.value = statusOptions.includes(ticket?.status) ? ticket.status : "New";
   els.descriptionInput.value = ticket?.description || "";
   els.urgencyInput.value = ticket?.urgency || "Low - Not Urgent";
   els.impactInput.value = ticket?.impact || "Individual user";
-  els.requestUserInput.value = ticket?.requestUser || "Kelly Cox";
+  els.requestUserInput.value = ticket?.requestUser || actorName();
   els.assetInput.value = ticket?.asset || "";
   els.titleInput.focus();
 }
@@ -606,7 +741,7 @@ async function saveTicket(event) {
     category: els.categoryInput.value,
     subCategory: existing?.subCategory || "Ticket System",
     thirdCategory: existing?.thirdCategory || "General",
-    modifyUser: "Kelly Cox",
+    modifyUser: actorName(),
     description: els.descriptionInput.value.trim(),
     impact: els.impactInput.value,
     asset: els.assetInput.value.trim(),
@@ -646,7 +781,7 @@ async function updateDetailTitle() {
   const ticket = tickets.find((item) => item.id === activeTicketId);
   if (!ticket) return;
   ticket.title = els.detailTitle.value.trim() || ticket.title;
-  ticket.modifyUser = "Kelly Cox";
+  ticket.modifyUser = actorName();
   try {
     const saved = await apiRequest("action=save-ticket", {
       method: "POST",
@@ -679,25 +814,25 @@ function switchView(view) {
 }
 
 function updateMetrics() {
-  const activeTickets = tickets.filter((ticket) => ticket.status !== "Resolved");
+  const activeTickets = tickets.filter((ticket) => !resolvedStatuses.includes(ticket.status));
   const totalAge = activeTickets.reduce((sum, ticket) => sum + getTicketAge(ticket), 0);
   const averageAge = activeTickets.length ? Math.round(totalAge / activeTickets.length) : 0;
   const today = new Date().toDateString();
 
-  els.openCount.textContent = tickets.filter((ticket) => ticket.status === "New").length;
-  els.urgentCount.textContent = tickets.filter((ticket) => ticket.urgency.includes("Urgent") || ticket.priority === "P1-Highest").length;
-  els.resolvedCount.textContent = tickets.filter((ticket) => ticket.status === "Resolved").length;
+  els.openCount.textContent = activeTickets.length;
+  els.urgentCount.textContent = tickets.filter((ticket) => ticket.urgency.includes("Urgent") || ["P1-Highest", "P2-High"].includes(ticket.priority)).length;
+  els.resolvedCount.textContent = tickets.filter((ticket) => resolvedStatuses.includes(ticket.status)).length;
   els.newTodayCount.textContent = tickets.filter((ticket) => new Date(ticket.requestTime).toDateString() === today).length;
   els.averageAge.textContent = `${averageAge}d`;
-  els.needsResponseCount.textContent = tickets.filter((ticket) => ["New", "User Responded"].includes(ticket.status)).length;
+  els.needsResponseCount.textContent = tickets.filter((ticket) => responseStatuses.includes(ticket.status)).length;
 }
 
 function renderReports() {
-  const activeTickets = tickets.filter((ticket) => ticket.status !== "Resolved");
+  const activeTickets = tickets.filter((ticket) => !resolvedStatuses.includes(ticket.status));
   els.reportTotalCount.textContent = tickets.length;
   els.reportActiveCount.textContent = activeTickets.length;
-  els.reportResolvedCount.textContent = tickets.filter((ticket) => ticket.status === "Resolved").length;
-  els.reportPriorityCount.textContent = tickets.filter((ticket) => ticket.priority === "P1-Highest").length;
+  els.reportResolvedCount.textContent = tickets.filter((ticket) => resolvedStatuses.includes(ticket.status)).length;
+  els.reportPriorityCount.textContent = tickets.filter((ticket) => ["P1-Highest", "P2-High"].includes(ticket.priority)).length;
   els.reportStatusList.innerHTML = renderReportList(countTicketsBy((ticket) => ticket.status || "Unknown"), tickets.length);
   els.reportCategoryList.innerHTML = renderReportList(countTicketsBy((ticket) => ticket.category || "Uncategorized"), tickets.length);
 }
@@ -752,10 +887,10 @@ function renderDashboard() {
   });
 
   const columns = [
-    { name: "New", statuses: ["New"] },
-    { name: "In Progress", statuses: ["In Progress"] },
-    { name: "User Responded", statuses: ["User Responded"] },
-    { name: "Resolved", statuses: ["Resolved"] },
+    { name: "New", statuses: ["New", "Open"] },
+    { name: "In Progress", statuses: ["In Progress", "Escalated"] },
+    { name: "Waiting", statuses: ["Waiting on Customer", "User Responded", "Pending Vendor", "On Hold"] },
+    { name: "Done", statuses: resolvedStatuses },
   ];
 
   els.dashboardBoard.innerHTML = columns.map((column) => {
@@ -811,7 +946,7 @@ function renderDashboardCard(ticket) {
 }
 
 function priorityRank(priority) {
-  return { "P1-Highest": 1, "P4-Normal": 2, "P5-Low": 3 }[priority] || 9;
+  return { "P1-Highest": 1, "P2-High": 2, "P3-Medium": 3, "P4-Normal": 4, "P5-Low": 5 }[priority] || 9;
 }
 
 function getTicketAge(ticket) {

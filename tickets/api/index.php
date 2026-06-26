@@ -5,9 +5,78 @@ require __DIR__ . '/bootstrap.php';
 
 try {
     $pdo = db();
+    ensure_auth_schema($pdo);
     $action = $_GET['action'] ?? 'bootstrap';
 
+    if ($action === 'login') {
+        $body = read_json_body();
+        $email = trim((string) ($body['email'] ?? ''));
+        $password = (string) ($body['password'] ?? '');
+
+        if ($email === '' || $password === '') {
+            json_response(['error' => 'Email and password are required'], 400);
+        }
+
+        $stmt = $pdo->prepare('SELECT id, name, email, role, password_hash, password_reset_required FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1');
+        $stmt->execute([$email]);
+        $user = $stmt->fetch();
+        $hash = is_array($user) ? (string) ($user['password_hash'] ?? '') : '';
+
+        if (!$user || $hash === '' || !password_verify($password, $hash)) {
+            json_response(['error' => 'Invalid email or password'], 401);
+        }
+
+        session_regenerate_id(true);
+        $_SESSION['ticket_user_id'] = (int) $user['id'];
+        $pdo->prepare('UPDATE users SET last_login_at = NOW() WHERE id = ?')->execute([(int) $user['id']]);
+
+        json_response(['user' => public_user($user)]);
+    }
+
+    if ($action === 'logout') {
+        destroy_session_cookie();
+        json_response(['ok' => true]);
+    }
+
+    $currentUser = require_login($pdo);
+
+    if ($action === 'change-password') {
+        $body = read_json_body();
+        $currentPassword = (string) ($body['currentPassword'] ?? '');
+        $newPassword = (string) ($body['newPassword'] ?? '');
+
+        if (strlen($newPassword) < 10) {
+            json_response(['error' => 'Use at least 10 characters'], 400);
+        }
+
+        $stmt = $pdo->prepare('SELECT id, name, email, role, password_hash, password_reset_required FROM users WHERE id = ? LIMIT 1');
+        $stmt->execute([(int) $currentUser['id']]);
+        $user = $stmt->fetch();
+        if (!$user || !password_verify($currentPassword, (string) ($user['password_hash'] ?? ''))) {
+            json_response(['error' => 'Current password is not correct'], 401);
+        }
+
+        $newHash = password_hash($newPassword, PASSWORD_DEFAULT);
+        $pdo->prepare('UPDATE users SET password_hash = ?, password_reset_required = 0 WHERE id = ?')->execute([$newHash, (int) $user['id']]);
+
+        $stmt = $pdo->prepare('SELECT id, name, email, role, password_reset_required FROM users WHERE id = ? LIMIT 1');
+        $stmt->execute([(int) $user['id']]);
+        $updatedUser = $stmt->fetch();
+        if (!$updatedUser) {
+            json_response(['error' => 'User account could not be loaded'], 500);
+        }
+        json_response(['user' => public_user($updatedUser)]);
+    }
+
+    if (!empty($currentUser['password_reset_required']) && $action !== 'bootstrap') {
+        json_response(['error' => 'Password change required'], 403);
+    }
+
     if ($action === 'bootstrap') {
+        if (!empty($currentUser['password_reset_required'])) {
+            json_response(['currentUser' => public_user($currentUser), 'users' => [], 'tickets' => []]);
+        }
+
         $users = $pdo->query('SELECT id, name, email, role FROM users ORDER BY id')->fetchAll();
         $ticketRows = $pdo->query('SELECT * FROM tickets ORDER BY id DESC')->fetchAll();
         $tickets = array_map('db_ticket_to_api', $ticketRows);
@@ -27,7 +96,7 @@ try {
             }
         }
 
-        json_response(['users' => $users, 'tickets' => $tickets]);
+        json_response(['currentUser' => public_user($currentUser), 'users' => $users, 'tickets' => $tickets]);
     }
 
     if ($action === 'save-ticket') {
@@ -50,7 +119,7 @@ try {
             'category' => $body['category'] ?? 'Application',
             'sub_category' => $body['subCategory'] ?? 'Ticket System',
             'third_category' => $body['thirdCategory'] ?? 'General',
-            'modify_user' => $body['modifyUser'] ?? 'Kelly Cox',
+            'modify_user' => $currentUser['name'] ?? 'System',
             'description' => $body['description'] ?? '',
             'impact' => $body['impact'] ?? 'Individual user',
             'asset' => $body['asset'] ?? '',

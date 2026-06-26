@@ -3,6 +3,19 @@ declare(strict_types=1);
 
 header('Content-Type: application/json; charset=utf-8');
 
+$secureCookie = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+session_name('ticket_system_session');
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path' => '/',
+    'secure' => $secureCookie,
+    'httponly' => true,
+    'samesite' => 'Lax',
+]);
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
+
 function json_response(array $payload, int $status = 200): void
 {
     http_response_code($status);
@@ -66,6 +79,84 @@ function db(): PDO
     ]);
 
     return $pdo;
+}
+
+function users_table_has_column(PDO $pdo, string $column): bool
+{
+    $stmt = $pdo->prepare('SHOW COLUMNS FROM users LIKE ?');
+    $stmt->execute([$column]);
+    return (bool) $stmt->fetch();
+}
+
+function ensure_auth_schema(PDO $pdo): void
+{
+    static $checked = false;
+    if ($checked) {
+        return;
+    }
+
+    if (!users_table_has_column($pdo, 'password_hash')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN password_hash VARCHAR(255) NULL');
+    }
+    if (!users_table_has_column($pdo, 'password_reset_required')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN password_reset_required TINYINT(1) NOT NULL DEFAULT 0');
+    }
+    if (!users_table_has_column($pdo, 'last_login_at')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN last_login_at DATETIME NULL');
+    }
+
+    $checked = true;
+}
+
+function public_user(array $user): array
+{
+    return [
+        'id' => (int) $user['id'],
+        'name' => (string) $user['name'],
+        'email' => (string) $user['email'],
+        'role' => (string) $user['role'],
+        'passwordResetRequired' => !empty($user['password_reset_required']),
+    ];
+}
+
+function current_user(PDO $pdo): ?array
+{
+    if (empty($_SESSION['ticket_user_id'])) {
+        return null;
+    }
+
+    $stmt = $pdo->prepare('SELECT id, name, email, role, password_reset_required FROM users WHERE id = ? LIMIT 1');
+    $stmt->execute([(int) $_SESSION['ticket_user_id']]);
+    $user = $stmt->fetch();
+    return $user ?: null;
+}
+
+function require_login(PDO $pdo): array
+{
+    $user = current_user($pdo);
+    if (!$user) {
+        json_response(['error' => 'Authentication required'], 401);
+    }
+    return $user;
+}
+
+function destroy_session_cookie(): void
+{
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        return;
+    }
+
+    $_SESSION = [];
+    $params = session_get_cookie_params();
+    setcookie(session_name(), '', [
+        'expires' => time() - 42000,
+        'path' => $params['path'],
+        'domain' => $params['domain'] ?? '',
+        'secure' => (bool) $params['secure'],
+        'httponly' => (bool) $params['httponly'],
+        'samesite' => $params['samesite'] ?? 'Lax',
+    ]);
+    session_destroy();
 }
 
 function db_ticket_to_api(array $ticket): array

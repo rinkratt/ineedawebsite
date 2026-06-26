@@ -12,9 +12,13 @@ try {
             name VARCHAR(120) NOT NULL,
             email VARCHAR(190) NOT NULL UNIQUE,
             role VARCHAR(80) NOT NULL,
+            password_hash VARCHAR(255) NULL,
+            password_reset_required TINYINT(1) NOT NULL DEFAULT 0,
+            last_login_at DATETIME NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+    ensure_auth_schema($pdo);
 
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS tickets (
@@ -96,9 +100,9 @@ try {
         ');
         $tickets = [
             ['Request', 'Add user directory and roles', 'New', 'Normal - Within a week', 0, 'Kelly Cox', 'P4-Normal', 'Kelly Cox', 'Application', 'Ticket System', 'Users', 'Kelly Cox', 'Create the first internal users: admin plus Tier 2 technicians.', 'Individual user', '', 'DEFAULT'],
-            ['Request', 'Build email intake plan', 'New', 'High - By the end of tomorrow', 1, 'Kelly Cox', 'P1-Highest', 'Matt Arnold', 'Application', 'Ticket System', 'Email Intake', 'Kelly Cox', 'Plan how inbound support emails should become tickets with sender, subject, and message body mapped into service records.', 'Department', '', 'DEFAULT'],
-            ['Problem', 'Local storage is temporary', 'In Progress', 'Normal - Within a week', 2, 'Kelly Cox', 'P4-Normal', 'Larsen Vallecillo', 'Application', 'Ticket System', 'Data Storage', 'Larsen Vallecillo', 'Replace browser-only storage with the shared MySQL-backed API.', 'Organization', '', 'DEFAULT'],
-            ['Change', 'Deploy ticket system under /tickets', 'Resolved', 'Low - Not Urgent', 3, 'Kelly Cox', 'P5-Low', 'Kelly Cox', 'Hosting', 'Plesk', 'Deployment', 'Kelly Cox', 'Publish the ticket prototype to ineedawebsite.us/tickets and verify the public URL after upload.', 'Individual user', '', 'DEFAULT'],
+            ['Request', 'Build email intake plan', 'Escalated', 'High - By the end of tomorrow', 1, 'Kelly Cox', 'P1-Highest', 'Matt Arnold', 'Application', 'Ticket System', 'Email Intake', 'Kelly Cox', 'Plan how inbound support emails should become tickets with sender, subject, and message body mapped into service records.', 'Department', '', 'DEFAULT'],
+            ['Problem', 'Local storage is temporary', 'In Progress', 'Normal - Within a week', 2, 'Kelly Cox', 'P3-Medium', 'Larsen Vallecillo', 'Application', 'Ticket System', 'Data Storage', 'Larsen Vallecillo', 'Replace browser-only storage with the shared MySQL-backed API.', 'Organization', '', 'DEFAULT'],
+            ['Change', 'Deploy ticket system under /tickets', 'Closed', 'Low - Not Urgent', 3, 'Kelly Cox', 'P5-Low', 'Kelly Cox', 'Hosting', 'Plesk', 'Deployment', 'Kelly Cox', 'Publish the ticket prototype to ineedawebsite.us/tickets and verify the public URL after upload.', 'Individual user', '', 'DEFAULT'],
             ['Incident', 'Mobile create button was hidden', 'Resolved', 'Low - Not Urgent', 4, 'Kelly Cox', 'P5-Low', 'Matt Arnold', 'Interface', 'Responsive', 'Navigation', 'Matt Arnold', 'The sidebar create action disappeared on mobile. Add a visible New Ticket action in the top bar.', 'Individual user', '', 'DEFAULT'],
             ['Request', 'Create branded dashboard', 'In Progress', 'Normal - Within a week', 5, 'Kelly Cox', 'P4-Normal', 'Larsen Vallecillo', 'Interface', 'Dashboard', 'Branding', 'Larsen Vallecillo', 'Keep the original friendly dashboard style while showing the dense service-record table from the Tickets nav item.', 'Individual user', '', 'DEFAULT'],
         ];
