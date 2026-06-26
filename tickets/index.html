@@ -367,6 +367,7 @@
               <input id="detailTitle" aria-label="Ticket title" />
             </div>
             <div class="detail-actions">
+              <button class="secondary-button" id="editTicketButton" type="button">Edit Ticket</button>
               <button class="ghost-icon" type="button" title="Share" aria-label="Share">⌯</button>
               <button class="ghost-icon" type="button" title="More" aria-label="More">⋮</button>
             </div>
@@ -375,7 +376,7 @@
           <div class="summary-strip">
             <div>
               <span>Priority</span>
-              <strong class="chip red-chip" id="detailPriority"></strong>
+              <select class="detail-select priority-select" id="detailPriority"></select>
             </div>
             <div>
               <span>Categories</span>
@@ -387,7 +388,7 @@
             </div>
             <div>
               <span>Status</span>
-              <strong class="chip dark-chip" id="detailStatus"></strong>
+              <select class="detail-select status-select" id="detailStatus"></select>
             </div>
           </div>
 

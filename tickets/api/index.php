@@ -126,11 +126,21 @@ try {
             'template' => $body['template'] ?? 'DEFAULT',
         ];
 
+        $previousTicket = null;
         if ($id) {
+            $previousStmt = $pdo->prepare('SELECT status, priority FROM tickets WHERE id = ?');
+            $previousStmt->execute([$id]);
+            $previousTicket = $previousStmt->fetch();
+
             $sql = 'UPDATE tickets SET type = :type, title = :title, status = :status, urgency = :urgency, request_time = :request_time, request_user = :request_user, priority = :priority, assignee = :assignee, category = :category, sub_category = :sub_category, third_category = :third_category, modify_user = :modify_user, description = :description, impact = :impact, asset = :asset, template = :template, updated_at = NOW() WHERE id = :id';
             $fields['id'] = $id;
             $pdo->prepare($sql)->execute($fields);
             $event = 'Ticket updated';
+            if ($previousTicket && (string) $previousTicket['status'] !== (string) $fields['status']) {
+                $event = 'Status changed to ' . $fields['status'];
+            } elseif ($previousTicket && (string) $previousTicket['priority'] !== (string) $fields['priority']) {
+                $event = 'Priority changed to ' . $fields['priority'];
+            }
         } else {
             $sql = 'INSERT INTO tickets (type, title, status, urgency, request_time, request_user, priority, assignee, category, sub_category, third_category, modify_user, description, impact, asset, template) VALUES (:type, :title, :status, :urgency, :request_time, :request_user, :priority, :assignee, :category, :sub_category, :third_category, :modify_user, :description, :impact, :asset, :template)';
             $pdo->prepare($sql)->execute($fields);

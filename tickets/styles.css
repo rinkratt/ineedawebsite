@@ -769,7 +769,7 @@ label textarea,
 
 .summary-strip {
   display: grid;
-  grid-template-columns: 180px 1fr 190px 140px;
+  grid-template-columns: minmax(170px, 0.6fr) minmax(220px, 1.4fr) minmax(160px, 0.6fr) minmax(200px, 0.8fr);
   gap: 22px;
   align-items: end;
 }
@@ -777,6 +777,27 @@ label textarea,
 .summary-strip > div {
   display: grid;
   gap: 7px;
+}
+
+.detail-select {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0 10px;
+  color: var(--ink);
+  background: var(--panel);
+  font-weight: 900;
+}
+
+.priority-select {
+  border-color: var(--red);
+  color: var(--red-dark);
+  background: var(--red-soft);
+}
+
+.status-select {
+  border-color: var(--dark-chip);
 }
 
 .chip-row {

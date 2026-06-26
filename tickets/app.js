@@ -95,6 +95,7 @@ const els = {
   requestUserInput: document.querySelector("#requestUserInput"),
   assetInput: document.querySelector("#assetInput"),
   backButton: document.querySelector("#backButton"),
+  editTicket: document.querySelector("#editTicketButton"),
   openCount: document.querySelector("#openCount"),
   urgentCount: document.querySelector("#urgentCount"),
   resolvedCount: document.querySelector("#resolvedCount"),
@@ -131,7 +132,13 @@ els.assigneeFilter.addEventListener("change", renderQueue);
 els.priorityFilter.addEventListener("change", renderQueue);
 els.clearFilters.addEventListener("click", clearFilters);
 els.backButton.addEventListener("click", showQueue);
+els.editTicket.addEventListener("click", () => {
+  const ticket = tickets.find((item) => item.id === activeTicketId);
+  if (ticket) openCompose(ticket);
+});
 els.detailTitle.addEventListener("change", updateDetailTitle);
+els.detailPriority.addEventListener("change", () => updateDetailField("priority", els.detailPriority.value));
+els.detailStatus.addEventListener("change", () => updateDetailField("status", els.detailStatus.value));
 els.exportButton.addEventListener("click", exportTickets);
 els.importInput.addEventListener("change", importTickets);
 
@@ -391,6 +398,10 @@ function renderAssigneeOptions() {
   els.assigneeFilter.value = assignees.includes(current) ? current : "all";
 }
 
+function renderSelectOptions(options, selected) {
+  return options.map((option) => `<option value="${escapeHtml(option)}"${option === selected ? " selected" : ""}>${escapeHtml(option)}</option>`).join("");
+}
+
 function getFilteredTickets() {
   const query = els.search.value.trim().toLowerCase();
   return tickets.filter((ticket) => {
@@ -454,10 +465,12 @@ function renderDetail() {
 
   els.detailType.textContent = `${ticket.type} ${ticket.id}`;
   els.detailTitle.value = ticket.title;
-  els.detailPriority.textContent = ticket.priority;
+  els.detailPriority.innerHTML = renderSelectOptions(priorityOptions, ticket.priority);
+  els.detailPriority.value = ticket.priority;
   els.detailCategories.innerHTML = [ticket.category, ticket.subCategory, ticket.thirdCategory].filter(Boolean).map((category) => `<span class="chip gray-chip">${escapeHtml(category)}</span>`).join("");
   els.detailAssignee.textContent = ticket.assignee || "Unassigned";
-  els.detailStatus.textContent = ticket.status;
+  els.detailStatus.innerHTML = renderSelectOptions(statusOptions, ticket.status);
+  els.detailStatus.value = ticket.status;
 
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.classList.toggle("active", tab.dataset.tab === activeDetailTab);
@@ -792,6 +805,34 @@ async function updateDetailTitle() {
     renderQueue();
   } catch (error) {
     alert("Title could not be saved.");
+    console.error(error);
+  }
+}
+
+async function updateDetailField(field, value) {
+  const options = field === "priority" ? priorityOptions : field === "status" ? statusOptions : [];
+  const ticket = tickets.find((item) => item.id === activeTicketId);
+  if (!ticket || !options.includes(value) || ticket[field] === value) return;
+
+  const previousValue = ticket[field];
+  ticket[field] = value;
+  ticket.modifyUser = actorName();
+
+  try {
+    const saved = await apiRequest("action=save-ticket", {
+      method: "POST",
+      body: JSON.stringify(ticket),
+    });
+    Object.assign(ticket, normalizeTicket(saved.ticket));
+    renderDashboard();
+    renderQueue();
+    renderReports();
+    updateMetrics();
+    renderDetail();
+  } catch (error) {
+    ticket[field] = previousValue;
+    renderDetail();
+    alert(`${field === "priority" ? "Priority" : "Status"} could not be saved.`);
     console.error(error);
   }
 }
