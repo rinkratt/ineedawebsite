@@ -129,8 +129,6 @@ const els = {
   newTodayCount: document.querySelector("#newTodayCount"),
   averageAge: document.querySelector("#averageAge"),
   needsResponseCount: document.querySelector("#needsResponseCount"),
-  exportButton: document.querySelector("#exportButton"),
-  importInput: document.querySelector("#importInput"),
   detailType: document.querySelector("#detailType"),
   detailTitle: document.querySelector("#detailTitle"),
   detailPriority: document.querySelector("#detailPriority"),
@@ -206,8 +204,6 @@ els.editTicket.addEventListener("click", () => {
 els.detailTitle.addEventListener("change", updateDetailTitle);
 els.detailPriority.addEventListener("change", () => updateDetailField("priority", els.detailPriority.value));
 els.detailStatus.addEventListener("change", () => updateDetailField("status", els.detailStatus.value));
-els.exportButton.addEventListener("click", exportTickets);
-els.importInput.addEventListener("change", importTickets);
 
 document.querySelectorAll("[data-password-toggle]").forEach((button) => {
   button.addEventListener("click", togglePasswordVisibility);
@@ -1541,35 +1537,6 @@ function highPriorityOptions() {
 function getTicketAge(ticket) {
   const diff = Date.now() - new Date(ticket.requestTime).getTime();
   return Math.max(0, Math.floor(diff / 86400000));
-}
-
-function exportTickets() {
-  const blob = new Blob([JSON.stringify(tickets, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `tickets-${new Date().toISOString().slice(0, 10)}.json`;
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
-function importTickets(event) {
-  const file = event.target.files?.[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.addEventListener("load", () => {
-    try {
-      const imported = JSON.parse(reader.result);
-      if (!Array.isArray(imported)) throw new Error("Invalid import");
-      tickets = imported.map(normalizeTicket);
-      render();
-    } catch {
-      alert("That file could not be imported.");
-    } finally {
-      els.importInput.value = "";
-    }
-  });
-  reader.readAsText(file);
 }
 
 function formatDate(value) {
