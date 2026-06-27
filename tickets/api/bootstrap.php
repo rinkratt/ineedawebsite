@@ -307,6 +307,7 @@ function ensure_settings_schema(PDO $pdo): void
     seed_ticket_priorities($pdo);
     seed_ticket_statuses($pdo);
     seed_ticket_categories($pdo);
+    seed_default_company($pdo);
 
     $checked = true;
 }
@@ -368,6 +369,27 @@ function seed_ticket_categories(PDO $pdo): void
             $index + 1,
         ]);
     }
+}
+
+function seed_default_company(PDO $pdo): void
+{
+    if ((int) $pdo->query('SELECT COUNT(*) FROM companies')->fetchColumn() > 0) {
+        return;
+    }
+
+    $stmt = $pdo->prepare('
+        INSERT INTO companies (name, workspace_label, app_title, logo_name, logo_data_url, logo_url, theme, active)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+    ');
+    $stmt->execute([
+        'Weneedhelp',
+        'Weneedhelp Tech Space',
+        'Ticket System',
+        '',
+        '',
+        '/logo.svg',
+        'light',
+    ]);
 }
 
 function categories_seed_from_file(): array
