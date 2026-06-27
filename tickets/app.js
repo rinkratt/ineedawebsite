@@ -22,7 +22,13 @@ const fallbackCategories = [
   { id: "fallback-account", category: "Account", subCategory: "Access", thirdCategory: "General", active: true },
   { id: "fallback-access", category: "Access", subCategory: "Account Access", thirdCategory: "Cannot log on", active: true },
 ];
+const defaultCompanyLogo = "/logo.svg";
+const maxCompanyLogoBytes = 1500000;
 let categoryOptions = (Array.isArray(window.ticketCategories) && window.ticketCategories.length ? window.ticketCategories : fallbackCategories).map(normalizeCategoryOption);
+let companies = [];
+let activeCompanyId = null;
+let pendingCompanyLogoDataUrl = "";
+let pendingCompanyLogoName = "";
 
 const defaultUsers = [
   { id: 1, name: "Kelly Cox", email: "kelly.cox@ineedawebsite.us", role: "Admin" },
@@ -193,6 +199,25 @@ const els = {
   newUserRole: document.querySelector("#newUserRole"),
   newUserPassword: document.querySelector("#newUserPassword"),
   newUserIsTech: document.querySelector("#newUserIsTech"),
+  addCompany: document.querySelector("#addCompanyButton"),
+  companySettingsList: document.querySelector("#companySettingsList"),
+  companySettingsForm: document.querySelector("#companySettingsForm"),
+  companyId: document.querySelector("#companyId"),
+  companyName: document.querySelector("#companyName"),
+  companyPhone: document.querySelector("#companyPhone"),
+  companyAddress: document.querySelector("#companyAddress"),
+  companyAddress2: document.querySelector("#companyAddress2"),
+  companyCity: document.querySelector("#companyCity"),
+  companyState: document.querySelector("#companyState"),
+  companyZip: document.querySelector("#companyZip"),
+  companyTheme: document.querySelector("#companyTheme"),
+  companyNotes: document.querySelector("#companyNotes"),
+  companyLogoPreview: document.querySelector("#companyLogoPreview"),
+  companyLogoName: document.querySelector("#companyLogoName"),
+  companyLogoInput: document.querySelector("#companyLogoInput"),
+  restoreCompanyLogo: document.querySelector("#restoreCompanyLogoButton"),
+  companyActive: document.querySelector("#companyActive"),
+  cancelCompany: document.querySelector("#cancelCompanyButton"),
 };
 
 els.loginForm.addEventListener("submit", login);
@@ -239,6 +264,12 @@ els.newCategoryName.addEventListener("input", updateCategoryAddLevelOptions);
 els.newSubCategoryName.addEventListener("input", updateCategoryAddLevelOptions);
 els.newThirdCategoryName.addEventListener("input", updateCategoryAddLevelOptions);
 els.addUserForm.addEventListener("submit", saveNewUser);
+els.addCompany.addEventListener("click", startNewCompany);
+els.companySettingsList.addEventListener("click", selectCompanyFromEvent);
+els.companySettingsForm.addEventListener("submit", saveCompany);
+els.companyLogoInput.addEventListener("change", readCompanyLogoFile);
+els.restoreCompanyLogo.addEventListener("click", restoreCompanyLogo);
+els.cancelCompany.addEventListener("click", renderCompanySettings);
 els.prioritySettingsList.addEventListener("input", updateSettingFromEvent);
 els.prioritySettingsList.addEventListener("change", updateSettingFromEvent);
 els.prioritySettingsList.addEventListener("click", removeSettingFromEvent);
@@ -564,6 +595,13 @@ function applySettings(settings = {}) {
   categoryOptions = Array.isArray(settings.categories) && settings.categories.length
     ? settings.categories.map(normalizeCategoryOption)
     : categoryOptions;
+
+  companies = Array.isArray(settings.companies)
+    ? settings.companies.map(normalizeCompany)
+    : companies;
+  if (activeCompanyId && !companies.some((company) => company.id === activeCompanyId)) {
+    activeCompanyId = companies[0]?.id || null;
+  }
 }
 
 function normalizePrioritySetting(priority = {}, index = 0) {
@@ -715,6 +753,34 @@ function renderAssigneeInput(selected = "") {
   if (selected && !options.includes(selected)) options.unshift(selected);
   els.assigneeInput.innerHTML = `<option value="">Unassigned</option>${options.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("")}`;
   els.assigneeInput.value = selected && options.includes(selected) ? selected : "";
+}
+
+function normalizeCompany(company = {}) {
+  const theme = String(company.theme || "light").toLowerCase();
+  return {
+    id: company.id ? Number(company.id) : null,
+    name: String(company.name || ""),
+    address: String(company.address || ""),
+    address2: String(company.address2 || company.address_2 || ""),
+    city: String(company.city || ""),
+    state: String(company.state || ""),
+    zip: String(company.zip || ""),
+    phone: String(company.phone || ""),
+    notes: String(company.notes || ""),
+    logoName: String(company.logoName || company.logo_name || ""),
+    logoDataUrl: String(company.logoDataUrl || company.logo_data_url || ""),
+    logoUrl: String(company.logoUrl || company.logo_url || defaultCompanyLogo),
+    theme: theme === "dark" ? "dark" : "light",
+    active: company.active !== false,
+  };
+}
+
+function blankCompany() {
+  return normalizeCompany({
+    logoUrl: defaultCompanyLogo,
+    theme: "light",
+    active: true,
+  });
 }
 
 function normalizeCategoryOption(option = {}) {
@@ -1382,6 +1448,7 @@ function renderSettings() {
   if (config.panel === "priorities") renderPrioritySettings();
   if (config.panel === "statuses") renderStatusSettings();
   if (config.panel === "categories") renderCategorySettings();
+  if (config.panel === "companies") renderCompanySettings();
 }
 
 function renderPrioritySettings() {
@@ -1557,6 +1624,173 @@ function saveCategoryFromForm(event) {
   }
 
   hideCategoryAddForm();
+}
+
+function renderCompanySettings() {
+  if (!activeCompanyId && companies.length) {
+    activeCompanyId = companies[0].id;
+  }
+  if (activeCompanyId && !companies.some((company) => company.id === activeCompanyId)) {
+    activeCompanyId = companies[0]?.id || null;
+  }
+
+  renderCompanyList();
+  const selectedCompany = activeCompanyId
+    ? companies.find((company) => company.id === activeCompanyId)
+    : null;
+  renderCompanyForm(selectedCompany || blankCompany());
+}
+
+function renderCompanyList() {
+  if (!companies.length) {
+    els.companySettingsList.innerHTML = `<div class="empty-state">No companies yet</div>`;
+    return;
+  }
+
+  els.companySettingsList.innerHTML = companies.map((company) => {
+    const location = companyLocationLine(company);
+    return `
+      <button class="company-list-item${company.id === activeCompanyId ? " active" : ""}" type="button" data-company-id="${company.id}">
+        <strong>${escapeHtml(company.name || "Unnamed company")}</strong>
+        <span>${escapeHtml(location || "No location")}</span>
+        <small>${company.active ? "Active" : "Inactive"} - ${company.theme === "dark" ? "Dark" : "Light"} theme</small>
+      </button>
+    `;
+  }).join("");
+}
+
+function companyLocationLine(company) {
+  return [
+    [company.city, company.state].filter(Boolean).join(", "),
+    company.zip,
+  ].filter(Boolean).join(" ");
+}
+
+function startNewCompany() {
+  activeCompanyId = null;
+  renderCompanyList();
+  renderCompanyForm(blankCompany());
+  els.companyName.focus();
+}
+
+function selectCompanyFromEvent(event) {
+  const button = event.target.closest("[data-company-id]");
+  if (!button) return;
+  activeCompanyId = Number(button.dataset.companyId) || null;
+  renderCompanySettings();
+}
+
+function renderCompanyForm(company) {
+  const normalized = normalizeCompany(company);
+  pendingCompanyLogoDataUrl = normalized.logoDataUrl;
+  pendingCompanyLogoName = normalized.logoName;
+
+  els.companyId.value = normalized.id || "";
+  els.companyName.value = normalized.name;
+  els.companyPhone.value = normalized.phone;
+  els.companyAddress.value = normalized.address;
+  els.companyAddress2.value = normalized.address2;
+  els.companyCity.value = normalized.city;
+  els.companyState.value = normalized.state;
+  els.companyZip.value = normalized.zip;
+  els.companyTheme.value = normalized.theme;
+  els.companyNotes.value = normalized.notes;
+  els.companyActive.checked = normalized.active;
+  els.companyLogoInput.value = "";
+  updateCompanyLogoPreview();
+}
+
+function updateCompanyLogoPreview() {
+  const hasUploadedLogo = pendingCompanyLogoDataUrl !== "";
+  els.companyLogoPreview.src = hasUploadedLogo ? pendingCompanyLogoDataUrl : defaultCompanyLogo;
+  els.companyLogoName.textContent = hasUploadedLogo
+    ? pendingCompanyLogoName || "Uploaded logo"
+    : "Default logo";
+}
+
+function readCompanyLogoFile(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  if (!file.type.startsWith("image/")) {
+    alert("Please choose an image file.");
+    event.target.value = "";
+    return;
+  }
+  if (file.size > maxCompanyLogoBytes) {
+    alert("Logo images need to be under 1.5 MB.");
+    event.target.value = "";
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.addEventListener("load", () => {
+    pendingCompanyLogoDataUrl = String(reader.result || "");
+    pendingCompanyLogoName = file.name;
+    updateCompanyLogoPreview();
+  });
+  reader.addEventListener("error", () => {
+    alert("Logo could not be read.");
+    event.target.value = "";
+  });
+  reader.readAsDataURL(file);
+}
+
+function restoreCompanyLogo() {
+  pendingCompanyLogoDataUrl = "";
+  pendingCompanyLogoName = "";
+  els.companyLogoInput.value = "";
+  updateCompanyLogoPreview();
+}
+
+function collectCompanyForm() {
+  return normalizeCompany({
+    id: Number(els.companyId.value) || null,
+    name: els.companyName.value.trim(),
+    phone: els.companyPhone.value.trim(),
+    address: els.companyAddress.value.trim(),
+    address2: els.companyAddress2.value.trim(),
+    city: els.companyCity.value.trim(),
+    state: els.companyState.value.trim(),
+    zip: els.companyZip.value.trim(),
+    theme: els.companyTheme.value,
+    notes: els.companyNotes.value.trim(),
+    logoName: pendingCompanyLogoName,
+    logoDataUrl: pendingCompanyLogoDataUrl,
+    logoUrl: defaultCompanyLogo,
+    active: els.companyActive.checked,
+  });
+}
+
+async function saveCompany(event) {
+  event.preventDefault();
+  const submitButton = event.submitter;
+  const payload = collectCompanyForm();
+
+  if (!payload.name) {
+    alert("Company name is required.");
+    els.companyName.focus();
+    return;
+  }
+
+  if (submitButton) submitButton.disabled = true;
+  try {
+    const result = await apiRequest("action=save-company", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    companies = Array.isArray(result.companies) ? result.companies.map(normalizeCompany) : companies;
+    const savedCompany = payload.id
+      ? companies.find((company) => company.id === payload.id)
+      : companies.find((company) => company.name.toLowerCase() === payload.name.toLowerCase());
+    activeCompanyId = savedCompany?.id || companies[0]?.id || null;
+    renderCompanySettings();
+  } catch (error) {
+    alert(error.message || "Company could not be saved.");
+    console.error(error);
+  } finally {
+    if (submitButton) submitButton.disabled = false;
+  }
 }
 
 function renderUserSettings() {

@@ -6,7 +6,7 @@
     <title>Ticket System</title>
     <link rel="icon" href="/favicon.ico?v=ineedawebsite-20260621" type="image/x-icon" sizes="any" />
     <link rel="shortcut icon" href="/favicon.ico?v=ineedawebsite-20260621" type="image/x-icon" />
-    <link rel="stylesheet" href="styles.css?v=20260627-category-cascade" />
+    <link rel="stylesheet" href="styles.css?v=20260627-companies" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -568,14 +568,84 @@
                 <div class="settings-list user-settings-list" id="userSettingsList"></div>
               </article>
 
-              <article class="panel settings-panel settings-detail-panel" data-settings-panel="companies" hidden>
+              <article class="panel settings-panel settings-detail-panel company-settings-panel" data-settings-panel="companies" hidden>
                 <div class="panel-header">
                   <div>
                     <p class="eyebrow">User Management</p>
                     <h3>Companies</h3>
                   </div>
+                  <button class="secondary-button" id="addCompanyButton" type="button">Add</button>
                 </div>
-                <div class="empty-state">No companies yet</div>
+                <div class="company-settings-layout">
+                  <aside class="company-list" id="companySettingsList" aria-label="Companies"></aside>
+                  <form class="company-form" id="companySettingsForm">
+                    <input id="companyId" type="hidden" />
+                    <div class="company-form-grid">
+                      <label class="company-field-wide">
+                        Name *
+                        <input id="companyName" required maxlength="160" />
+                      </label>
+                      <label>
+                        Phone
+                        <input id="companyPhone" maxlength="60" />
+                      </label>
+                      <label>
+                        Address
+                        <input id="companyAddress" maxlength="190" />
+                      </label>
+                      <label>
+                        Address 2
+                        <input id="companyAddress2" maxlength="190" />
+                      </label>
+                      <label>
+                        City
+                        <input id="companyCity" maxlength="100" />
+                      </label>
+                      <label>
+                        State
+                        <input id="companyState" maxlength="80" />
+                      </label>
+                      <label>
+                        Zip
+                        <input id="companyZip" maxlength="30" />
+                      </label>
+                      <label>
+                        Default Theme
+                        <select id="companyTheme">
+                          <option value="light">Light</option>
+                          <option value="dark">Dark</option>
+                        </select>
+                      </label>
+                      <label class="company-field-full">
+                        Notes
+                        <textarea id="companyNotes" rows="4" maxlength="2000"></textarea>
+                      </label>
+                    </div>
+
+                    <section class="company-logo-section" aria-label="Company logo">
+                      <div class="company-logo-preview">
+                        <img id="companyLogoPreview" alt="Company logo preview" />
+                      </div>
+                      <div class="company-logo-controls">
+                        <strong>Company logo</strong>
+                        <span id="companyLogoName">Default logo</span>
+                        <div class="company-logo-actions">
+                          <label class="secondary-button company-upload-button" for="companyLogoInput">Upload Logo</label>
+                          <input class="sr-only" id="companyLogoInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" />
+                          <button class="secondary-button" id="restoreCompanyLogoButton" type="button">Restore Default</button>
+                        </div>
+                      </div>
+                    </section>
+
+                    <div class="company-form-actions">
+                      <label class="check-label"><input id="companyActive" type="checkbox" checked /> Active</label>
+                      <div>
+                        <button class="secondary-button" id="cancelCompanyButton" type="button">Cancel</button>
+                        <button class="primary-button" type="submit">Save Company</button>
+                      </div>
+                    </div>
+                  </form>
+                </div>
               </article>
 
               <article class="panel settings-panel settings-detail-panel" data-settings-panel="categories" hidden>
@@ -800,6 +870,6 @@
     </aside>
 
     <script src="categories.js?v=20260626"></script>
-    <script src="app.js?v=20260627-category-cascade"></script>
+    <script src="app.js?v=20260627-companies"></script>
   </body>
 </html>

@@ -109,6 +109,11 @@ function ticket_categories_table_has_column(PDO $pdo, string $column): bool
     return table_has_column($pdo, 'ticket_categories', $column);
 }
 
+function companies_table_has_column(PDO $pdo, string $column): bool
+{
+    return table_has_column($pdo, 'companies', $column);
+}
+
 function ensure_password_reset_schema(PDO $pdo): void
 {
     $pdo->exec("
@@ -202,6 +207,28 @@ function ensure_settings_schema(PDO $pdo): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
 
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS companies (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(160) NOT NULL,
+            address VARCHAR(190) NOT NULL DEFAULT '',
+            address2 VARCHAR(190) NOT NULL DEFAULT '',
+            city VARCHAR(100) NOT NULL DEFAULT '',
+            state VARCHAR(80) NOT NULL DEFAULT '',
+            zip VARCHAR(30) NOT NULL DEFAULT '',
+            phone VARCHAR(60) NOT NULL DEFAULT '',
+            notes TEXT NULL,
+            logo_name VARCHAR(190) NOT NULL DEFAULT '',
+            logo_data_url MEDIUMTEXT NULL,
+            logo_url VARCHAR(255) NOT NULL DEFAULT '/logo.svg',
+            theme VARCHAR(20) NOT NULL DEFAULT 'light',
+            active TINYINT(1) NOT NULL DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_companies_active_name (active, name)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+
     if (!ticket_categories_table_has_column($pdo, 'description')) {
         $pdo->exec('ALTER TABLE ticket_categories ADD COLUMN description TEXT NULL AFTER third_category');
     }
@@ -222,6 +249,51 @@ function ensure_settings_schema(PDO $pdo): void
     }
     if (!ticket_categories_table_has_column($pdo, 'enable_problem')) {
         $pdo->exec('ALTER TABLE ticket_categories ADD COLUMN enable_problem TINYINT(1) NOT NULL DEFAULT 1 AFTER enable_change');
+    }
+    if (!companies_table_has_column($pdo, 'name')) {
+        $pdo->exec("ALTER TABLE companies ADD COLUMN name VARCHAR(160) NOT NULL DEFAULT '' AFTER id");
+    }
+    if (!companies_table_has_column($pdo, 'address')) {
+        $pdo->exec("ALTER TABLE companies ADD COLUMN address VARCHAR(190) NOT NULL DEFAULT '' AFTER name");
+    }
+    if (!companies_table_has_column($pdo, 'address2')) {
+        $pdo->exec("ALTER TABLE companies ADD COLUMN address2 VARCHAR(190) NOT NULL DEFAULT '' AFTER address");
+    }
+    if (!companies_table_has_column($pdo, 'city')) {
+        $pdo->exec("ALTER TABLE companies ADD COLUMN city VARCHAR(100) NOT NULL DEFAULT '' AFTER address2");
+    }
+    if (!companies_table_has_column($pdo, 'state')) {
+        $pdo->exec("ALTER TABLE companies ADD COLUMN state VARCHAR(80) NOT NULL DEFAULT '' AFTER city");
+    }
+    if (!companies_table_has_column($pdo, 'zip')) {
+        $pdo->exec("ALTER TABLE companies ADD COLUMN zip VARCHAR(30) NOT NULL DEFAULT '' AFTER state");
+    }
+    if (!companies_table_has_column($pdo, 'phone')) {
+        $pdo->exec("ALTER TABLE companies ADD COLUMN phone VARCHAR(60) NOT NULL DEFAULT '' AFTER zip");
+    }
+    if (!companies_table_has_column($pdo, 'notes')) {
+        $pdo->exec('ALTER TABLE companies ADD COLUMN notes TEXT NULL AFTER phone');
+    }
+    if (!companies_table_has_column($pdo, 'logo_name')) {
+        $pdo->exec("ALTER TABLE companies ADD COLUMN logo_name VARCHAR(190) NOT NULL DEFAULT '' AFTER notes");
+    }
+    if (!companies_table_has_column($pdo, 'logo_data_url')) {
+        $pdo->exec('ALTER TABLE companies ADD COLUMN logo_data_url MEDIUMTEXT NULL AFTER logo_name');
+    }
+    if (!companies_table_has_column($pdo, 'logo_url')) {
+        $pdo->exec("ALTER TABLE companies ADD COLUMN logo_url VARCHAR(255) NOT NULL DEFAULT '/logo.svg' AFTER logo_data_url");
+    }
+    if (!companies_table_has_column($pdo, 'theme')) {
+        $pdo->exec("ALTER TABLE companies ADD COLUMN theme VARCHAR(20) NOT NULL DEFAULT 'light' AFTER logo_url");
+    }
+    if (!companies_table_has_column($pdo, 'active')) {
+        $pdo->exec('ALTER TABLE companies ADD COLUMN active TINYINT(1) NOT NULL DEFAULT 1 AFTER theme');
+    }
+    if (!companies_table_has_column($pdo, 'created_at')) {
+        $pdo->exec('ALTER TABLE companies ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AFTER active');
+    }
+    if (!companies_table_has_column($pdo, 'updated_at')) {
+        $pdo->exec('ALTER TABLE companies ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at');
     }
 
     seed_ticket_priorities($pdo);
@@ -428,7 +500,36 @@ function settings_payload(PDO $pdo): array
                 'active' => !empty($category['active']),
             ];
         }, $pdo->query('SELECT id, sysaid_id, category, sub_category, third_category, description, visible_ssp, visible_admin, enable_incident, enable_request, enable_change, enable_problem, sort_order, active FROM ticket_categories ORDER BY sort_order, id')->fetchAll()),
+        'companies' => companies_payload($pdo),
     ];
+}
+
+function companies_payload(PDO $pdo): array
+{
+    $rows = $pdo->query('
+        SELECT id, name, address, address2, city, state, zip, phone, notes, logo_name, logo_data_url, logo_url, theme, active
+        FROM companies
+        ORDER BY active DESC, name, id
+    ')->fetchAll();
+
+    return array_map(static function (array $company): array {
+        return [
+            'id' => (int) $company['id'],
+            'name' => (string) $company['name'],
+            'address' => (string) $company['address'],
+            'address2' => (string) $company['address2'],
+            'city' => (string) $company['city'],
+            'state' => (string) $company['state'],
+            'zip' => (string) $company['zip'],
+            'phone' => (string) $company['phone'],
+            'notes' => (string) ($company['notes'] ?? ''),
+            'logoName' => (string) $company['logo_name'],
+            'logoDataUrl' => (string) ($company['logo_data_url'] ?? ''),
+            'logoUrl' => (string) ($company['logo_url'] ?: '/logo.svg'),
+            'theme' => in_array((string) $company['theme'], ['light', 'dark'], true) ? (string) $company['theme'] : 'light',
+            'active' => !empty($company['active']),
+        ];
+    }, $rows);
 }
 
 function users_payload(PDO $pdo): array

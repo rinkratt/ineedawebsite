@@ -89,6 +89,45 @@ function normalize_category_settings(array $rows): array
     return $normalized;
 }
 
+function normalize_company_payload(array $body): array
+{
+    $id = isset($body['id']) && $body['id'] ? (int) $body['id'] : null;
+    $name = trim_to_limit($body['name'] ?? '', 160);
+    $logoDataUrl = trim((string) ($body['logoDataUrl'] ?? $body['logo_data_url'] ?? ''));
+    $theme = strtolower(trim_to_limit($body['theme'] ?? 'light', 20));
+
+    if ($name === '') {
+        json_response(['error' => 'Company name is required.'], 400);
+    }
+
+    if (!in_array($theme, ['light', 'dark'], true)) {
+        $theme = 'light';
+    }
+
+    if ($logoDataUrl !== '') {
+        if (strlen($logoDataUrl) > 2000000 || !preg_match('/^data:image\/(?:png|jpe?g|webp|gif|svg\+xml);base64,/', $logoDataUrl)) {
+            json_response(['error' => 'Logo must be a PNG, JPG, WebP, GIF, or SVG image under 1.5 MB.'], 400);
+        }
+    }
+
+    return [
+        'id' => $id,
+        'name' => $name,
+        'address' => trim_to_limit($body['address'] ?? '', 190),
+        'address2' => trim_to_limit($body['address2'] ?? $body['address_2'] ?? '', 190),
+        'city' => trim_to_limit($body['city'] ?? '', 100),
+        'state' => trim_to_limit($body['state'] ?? '', 80),
+        'zip' => trim_to_limit($body['zip'] ?? '', 30),
+        'phone' => trim_to_limit($body['phone'] ?? '', 60),
+        'notes' => trim_to_limit($body['notes'] ?? '', 2000),
+        'logoName' => $logoDataUrl === '' ? '' : trim_to_limit($body['logoName'] ?? $body['logo_name'] ?? '', 190),
+        'logoDataUrl' => $logoDataUrl,
+        'logoUrl' => '/logo.svg',
+        'theme' => $theme,
+        'active' => !array_key_exists('active', $body) || !empty($body['active']),
+    ];
+}
+
 try {
     $pdo = db();
     ensure_auth_schema($pdo);
@@ -385,6 +424,63 @@ try {
         }
 
         json_response(['users' => users_payload($pdo)]);
+    }
+
+    if ($action === 'save-company') {
+        require_admin($currentUser);
+        $company = normalize_company_payload(read_json_body());
+        $id = $company['id'];
+
+        $duplicate = $pdo->prepare('SELECT id FROM companies WHERE LOWER(name) = LOWER(?) AND (? IS NULL OR id <> ?) LIMIT 1');
+        $duplicate->execute([$company['name'], $id, $id]);
+        if ($duplicate->fetch()) {
+            json_response(['error' => 'That company name is already in use.'], 400);
+        }
+
+        $fields = [
+            'name' => $company['name'],
+            'address' => $company['address'],
+            'address2' => $company['address2'],
+            'city' => $company['city'],
+            'state' => $company['state'],
+            'zip' => $company['zip'],
+            'phone' => $company['phone'],
+            'notes' => $company['notes'],
+            'logo_name' => $company['logoName'],
+            'logo_data_url' => $company['logoDataUrl'],
+            'logo_url' => $company['logoUrl'],
+            'theme' => $company['theme'],
+            'active' => $company['active'] ? 1 : 0,
+        ];
+
+        if ($id) {
+            $fields['id'] = $id;
+            $pdo->prepare('
+                UPDATE companies
+                SET name = :name,
+                    address = :address,
+                    address2 = :address2,
+                    city = :city,
+                    state = :state,
+                    zip = :zip,
+                    phone = :phone,
+                    notes = :notes,
+                    logo_name = :logo_name,
+                    logo_data_url = :logo_data_url,
+                    logo_url = :logo_url,
+                    theme = :theme,
+                    active = :active,
+                    updated_at = NOW()
+                WHERE id = :id
+            ')->execute($fields);
+        } else {
+            $pdo->prepare('
+                INSERT INTO companies (name, address, address2, city, state, zip, phone, notes, logo_name, logo_data_url, logo_url, theme, active)
+                VALUES (:name, :address, :address2, :city, :state, :zip, :phone, :notes, :logo_name, :logo_data_url, :logo_url, :theme, :active)
+            ')->execute($fields);
+        }
+
+        json_response(['companies' => companies_payload($pdo)]);
     }
 
     if ($action === 'save-ticket') {
