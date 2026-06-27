@@ -222,7 +222,7 @@ function ensure_settings_schema(PDO $pdo): void
             app_title VARCHAR(120) NOT NULL DEFAULT 'Ticket System',
             logo_name VARCHAR(190) NOT NULL DEFAULT '',
             logo_data_url MEDIUMTEXT NULL,
-            logo_url VARCHAR(255) NOT NULL DEFAULT '/logo.svg',
+            logo_url VARCHAR(255) NOT NULL DEFAULT '/logo.png',
             theme VARCHAR(20) NOT NULL DEFAULT 'light',
             active TINYINT(1) NOT NULL DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -289,7 +289,7 @@ function ensure_settings_schema(PDO $pdo): void
         $pdo->exec('ALTER TABLE companies ADD COLUMN logo_data_url MEDIUMTEXT NULL AFTER logo_name');
     }
     if (!companies_table_has_column($pdo, 'logo_url')) {
-        $pdo->exec("ALTER TABLE companies ADD COLUMN logo_url VARCHAR(255) NOT NULL DEFAULT '/logo.svg' AFTER logo_data_url");
+        $pdo->exec("ALTER TABLE companies ADD COLUMN logo_url VARCHAR(255) NOT NULL DEFAULT '/logo.png' AFTER logo_data_url");
     }
     if (!companies_table_has_column($pdo, 'theme')) {
         $pdo->exec("ALTER TABLE companies ADD COLUMN theme VARCHAR(20) NOT NULL DEFAULT 'light' AFTER logo_url");
@@ -374,6 +374,14 @@ function seed_ticket_categories(PDO $pdo): void
 function seed_default_company(PDO $pdo): void
 {
     if ((int) $pdo->query('SELECT COUNT(*) FROM companies')->fetchColumn() > 0) {
+        $stmt = $pdo->prepare("
+            UPDATE companies
+            SET logo_url = '/logo.png'
+            WHERE LOWER(name) = 'weneedhelp'
+                AND COALESCE(logo_data_url, '') = ''
+                AND (logo_url = '' OR logo_url = '/logo.svg' OR logo_url = '/assets/logo.svg')
+        ");
+        $stmt->execute();
         return;
     }
 
@@ -387,7 +395,7 @@ function seed_default_company(PDO $pdo): void
         'Ticket System',
         '',
         '',
-        '/logo.svg',
+        '/logo.png',
         'light',
     ]);
 }
@@ -558,7 +566,7 @@ function companies_payload(PDO $pdo): array
             'appTitle' => (string) ($company['app_title'] ?: 'Ticket System'),
             'logoName' => (string) $company['logo_name'],
             'logoDataUrl' => (string) ($company['logo_data_url'] ?? ''),
-            'logoUrl' => (string) ($company['logo_url'] ?: '/logo.svg'),
+            'logoUrl' => (string) ($company['logo_url'] ?: '/logo.png'),
             'theme' => in_array((string) $company['theme'], ['light', 'dark'], true) ? (string) $company['theme'] : 'light',
             'active' => !empty($company['active']),
         ];
@@ -581,7 +589,7 @@ function branding_payload(PDO $pdo): array
             'appTitle' => 'Ticket System',
             'logoName' => '',
             'logoDataUrl' => '',
-            'logoUrl' => '/logo.svg',
+            'logoUrl' => '/logo.png',
             'theme' => 'light',
         ];
     }
@@ -592,7 +600,7 @@ function branding_payload(PDO $pdo): array
         'appTitle' => (string) ($company['app_title'] ?: 'Ticket System'),
         'logoName' => (string) ($company['logo_name'] ?? ''),
         'logoDataUrl' => (string) ($company['logo_data_url'] ?? ''),
-        'logoUrl' => (string) ($company['logo_url'] ?: '/logo.svg'),
+        'logoUrl' => (string) ($company['logo_url'] ?: '/logo.png'),
         'theme' => in_array($theme, ['light', 'dark'], true) ? $theme : 'light',
     ];
 }

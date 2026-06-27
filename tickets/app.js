@@ -22,7 +22,7 @@ const fallbackCategories = [
   { id: "fallback-account", category: "Account", subCategory: "Access", thirdCategory: "General", active: true },
   { id: "fallback-access", category: "Access", subCategory: "Account Access", thirdCategory: "Cannot log on", active: true },
 ];
-const defaultCompanyLogo = "/logo.svg";
+const defaultCompanyLogo = "/logo.png";
 const maxCompanyLogoBytes = 1500000;
 const defaultBranding = {
   workspaceLabel: "Workspace",

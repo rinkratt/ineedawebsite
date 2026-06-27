@@ -124,7 +124,7 @@ function normalize_company_payload(array $body): array
         'appTitle' => trim_to_limit($body['appTitle'] ?? $body['app_title'] ?? 'Ticket System', 120) ?: 'Ticket System',
         'logoName' => $logoDataUrl === '' ? '' : trim_to_limit($body['logoName'] ?? $body['logo_name'] ?? '', 190),
         'logoDataUrl' => $logoDataUrl,
-        'logoUrl' => '/logo.svg',
+        'logoUrl' => '/logo.png',
         'theme' => $theme,
         'active' => !array_key_exists('active', $body) || !empty($body['active']),
     ];
