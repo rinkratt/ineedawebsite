@@ -192,6 +192,10 @@ button {
   font-weight: 900;
 }
 
+.login-portal-hint[hidden] {
+  display: none;
+}
+
 .app-shell {
   display: grid;
   min-height: 100vh;
