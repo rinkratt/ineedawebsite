@@ -114,23 +114,25 @@ button {
 
 .password-toggle {
   position: absolute;
-  top: 1px;
-  right: 1px;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
   display: grid;
-  width: 42px;
-  height: calc(100% - 2px);
-  min-height: 42px;
+  width: 32px;
+  height: 32px;
+  min-height: 0;
   place-items: center;
   border: 0;
-  border-left: 1px solid var(--line);
-  border-radius: 0 6px 6px 0;
+  border-radius: 50%;
   color: var(--muted);
   background: transparent;
+  cursor: pointer;
 }
 
 .password-toggle:hover,
 .password-toggle:focus-visible {
   color: var(--red);
+  background: rgba(199, 29, 37, 0.08);
 }
 
 .password-toggle svg {
