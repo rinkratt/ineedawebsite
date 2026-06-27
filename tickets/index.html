@@ -6,7 +6,7 @@
     <title>Ticket System</title>
     <link rel="icon" href="/favicon.ico?v=ineedawebsite-20260621" type="image/x-icon" sizes="any" />
     <link rel="shortcut icon" href="/favicon.ico?v=ineedawebsite-20260621" type="image/x-icon" />
-    <link rel="stylesheet" href="styles.css?v=20260627-sidebar-account" />
+    <link rel="stylesheet" href="styles.css?v=20260627-settings-directory" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -449,70 +449,149 @@
           <header class="topbar">
             <div>
               <p class="eyebrow">Administration</p>
-              <h2>Settings</h2>
+              <h2 id="settingsTitle">Settings</h2>
             </div>
-            <button class="primary-button" id="saveSettingsButton" type="button">Save Lists</button>
+            <div class="topbar-actions">
+              <button class="secondary-button" id="settingsBackButton" type="button" hidden>Back to Settings</button>
+              <button class="primary-button" id="saveSettingsButton" type="button" hidden>Save</button>
+            </div>
           </header>
 
-          <section class="settings-grid" aria-label="Ticket settings">
-            <article class="panel settings-panel">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Queue</p>
-                  <h3>Priorities</h3>
-                </div>
-                <button class="secondary-button" id="addPriorityButton" type="button">Add</button>
-              </div>
-              <div class="settings-list compact-settings-list" id="prioritySettingsList"></div>
-            </article>
+          <section class="settings-home" id="settingsHome" aria-label="Settings directory">
+            <div class="settings-search">
+              <input id="settingsDirectorySearch" type="search" placeholder="Find a setting" />
+            </div>
 
-            <article class="panel settings-panel">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Queue</p>
-                  <h3>Statuses</h3>
+            <div class="settings-directory">
+              <section class="settings-group">
+                <div class="settings-group-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" focusable="false">
+                    <rect x="4" y="4" width="6" height="6" rx="1.4" />
+                    <rect x="14" y="4" width="6" height="6" rx="1.4" />
+                    <rect x="4" y="14" width="6" height="6" rx="1.4" />
+                    <rect x="14" y="14" width="6" height="6" rx="1.4" />
+                  </svg>
                 </div>
-                <button class="secondary-button" id="addStatusButton" type="button">Add</button>
-              </div>
-              <div class="settings-list compact-settings-list" id="statusSettingsList"></div>
-            </article>
+                <div>
+                  <h3>Categories</h3>
+                  <div class="settings-links">
+                    <button class="settings-link" type="button" data-settings-open="categories">Manage Categories</button>
+                  </div>
+                </div>
+              </section>
 
-            <article class="panel settings-panel tech-settings-panel">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Team</p>
-                  <h3>Technicians</h3>
+              <section class="settings-group">
+                <div class="settings-group-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" focusable="false">
+                    <circle cx="9" cy="8" r="3.2" />
+                    <path d="M3.5 19c.8-3.2 2.6-4.8 5.5-4.8s4.7 1.6 5.5 4.8" />
+                    <path d="M16 7h4" />
+                    <path d="M18 5v4" />
+                    <path d="M16.5 14.5h4" />
+                    <path d="M16.5 18h4" />
+                  </svg>
                 </div>
-              </div>
-              <form class="settings-form" id="addUserForm">
-                <input id="newUserName" placeholder="Name" required />
-                <input id="newUserEmail" type="email" placeholder="Email" required />
-                <select id="newUserRole">
-                  <option>Tier 1 Tech</option>
-                  <option>Tier 2 Tech</option>
-                  <option>Admin</option>
-                  <option>End User</option>
-                </select>
-                <input id="newUserPassword" type="password" placeholder="Temporary password" minlength="10" required />
-                <label class="check-label"><input id="newUserIsTech" type="checkbox" checked /> Tech</label>
-                <button class="secondary-button" type="submit">Add</button>
-              </form>
-              <div class="settings-list user-settings-list" id="userSettingsList"></div>
-            </article>
+                <div>
+                  <h3>User Management</h3>
+                  <div class="settings-links">
+                    <button class="settings-link" type="button" data-settings-open="admins">Admins</button>
+                    <button class="settings-link" type="button" data-settings-open="end-users">End Users</button>
+                    <button class="settings-link" type="button" data-settings-open="companies">Companies</button>
+                  </div>
+                </div>
+              </section>
+
+              <section class="settings-group">
+                <div class="settings-group-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" focusable="false">
+                    <path d="M5 4h14v5H5z" />
+                    <path d="M5 15h14v5H5z" />
+                    <path d="M8 9v6" />
+                    <path d="M16 9v6" />
+                  </svg>
+                </div>
+                <div>
+                  <h3>Templates & Fields</h3>
+                  <div class="settings-links">
+                    <button class="settings-link" type="button" data-settings-open="statuses">Status Settings</button>
+                    <button class="settings-link" type="button" data-settings-open="priorities">Priority Settings</button>
+                  </div>
+                </div>
+              </section>
+            </div>
           </section>
 
-          <section class="panel settings-panel">
-            <div class="panel-header">
-              <div>
-                <p class="eyebrow">SysAid</p>
-                <h3>Categories</h3>
-              </div>
-              <div class="settings-actions">
-                <input id="categorySettingsSearch" type="search" placeholder="Search categories" />
-                <button class="secondary-button" id="addCategoryButton" type="button">Add</button>
-              </div>
-            </div>
-            <div class="settings-list category-settings-list" id="categorySettingsList"></div>
+          <section class="settings-editor" id="settingsEditor" hidden>
+            <section class="settings-grid" aria-label="Ticket settings">
+              <article class="panel settings-panel settings-detail-panel" data-settings-panel="priorities" hidden>
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Templates & Fields</p>
+                    <h3>Priority Settings</h3>
+                  </div>
+                  <button class="secondary-button" id="addPriorityButton" type="button">Add</button>
+                </div>
+                <div class="settings-list compact-settings-list" id="prioritySettingsList"></div>
+              </article>
+
+              <article class="panel settings-panel settings-detail-panel" data-settings-panel="statuses" hidden>
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Templates & Fields</p>
+                    <h3>Status Settings</h3>
+                  </div>
+                  <button class="secondary-button" id="addStatusButton" type="button">Add</button>
+                </div>
+                <div class="settings-list compact-settings-list" id="statusSettingsList"></div>
+              </article>
+
+              <article class="panel settings-panel settings-detail-panel tech-settings-panel" data-settings-panel="users" hidden>
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">User Management</p>
+                    <h3 id="userSettingsHeading">Admins</h3>
+                  </div>
+                </div>
+                <form class="settings-form" id="addUserForm">
+                  <input id="newUserName" placeholder="Name" required />
+                  <input id="newUserEmail" type="email" placeholder="Email" required />
+                  <select id="newUserRole">
+                    <option>Tier 1 Tech</option>
+                    <option>Tier 2 Tech</option>
+                    <option>Admin</option>
+                    <option>End User</option>
+                  </select>
+                  <input id="newUserPassword" type="password" placeholder="Temporary password" minlength="10" required />
+                  <label class="check-label"><input id="newUserIsTech" type="checkbox" checked /> Tech</label>
+                  <button class="secondary-button" type="submit">Add</button>
+                </form>
+                <div class="settings-list user-settings-list" id="userSettingsList"></div>
+              </article>
+
+              <article class="panel settings-panel settings-detail-panel" data-settings-panel="companies" hidden>
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">User Management</p>
+                    <h3>Companies</h3>
+                  </div>
+                </div>
+                <div class="empty-state">No companies yet</div>
+              </article>
+
+              <article class="panel settings-panel settings-detail-panel" data-settings-panel="categories" hidden>
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Categories</p>
+                    <h3>Manage Categories</h3>
+                  </div>
+                  <div class="settings-actions">
+                    <input id="categorySettingsSearch" type="search" placeholder="Search categories" />
+                    <button class="secondary-button" id="addCategoryButton" type="button">Add</button>
+                  </div>
+                </div>
+                <div class="settings-list category-settings-list" id="categorySettingsList"></div>
+              </article>
+            </section>
           </section>
         </section>
 

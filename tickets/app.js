@@ -33,11 +33,22 @@ let activeView = "dashboard";
 let currentUser = null;
 const initialResetToken = new URLSearchParams(window.location.search).get("reset") || "";
 let categorySettingsSearch = "";
+let settingsDirectorySearch = "";
+let activeSettingsPage = "home";
+let activeUserSettingsMode = "admins";
 const aiAssists = new Map();
 let aiChatBusy = false;
 const aiChatMessages = [
   { role: "assistant", content: "Hi, what would you like help with?" },
 ];
+const settingsPageConfig = {
+  categories: { title: "Manage Categories", panel: "categories", canSave: true },
+  admins: { title: "Admins", panel: "users", canSave: false, userMode: "admins" },
+  "end-users": { title: "End Users", panel: "users", canSave: false, userMode: "end-users" },
+  companies: { title: "Companies", panel: "companies", canSave: false },
+  statuses: { title: "Status Settings", panel: "statuses", canSave: true },
+  priorities: { title: "Priority Settings", panel: "priorities", canSave: true },
+};
 
 const els = {
   appShell: document.querySelector("#appShell"),
@@ -70,6 +81,11 @@ const els = {
   reportsView: document.querySelector("#reportsView"),
   aiChatView: document.querySelector("#aiChatView"),
   settingsView: document.querySelector("#settingsView"),
+  settingsTitle: document.querySelector("#settingsTitle"),
+  settingsBack: document.querySelector("#settingsBackButton"),
+  settingsHome: document.querySelector("#settingsHome"),
+  settingsEditor: document.querySelector("#settingsEditor"),
+  settingsDirectorySearch: document.querySelector("#settingsDirectorySearch"),
   detailView: document.querySelector("#detailView"),
   dashboardNav: document.querySelector("#dashboardNav"),
   ticketsNav: document.querySelector("#ticketsNav"),
@@ -145,6 +161,7 @@ const els = {
   categorySettingsList: document.querySelector("#categorySettingsList"),
   categorySettingsSearch: document.querySelector("#categorySettingsSearch"),
   userSettingsList: document.querySelector("#userSettingsList"),
+  userSettingsHeading: document.querySelector("#userSettingsHeading"),
   addUserForm: document.querySelector("#addUserForm"),
   newUserName: document.querySelector("#newUserName"),
   newUserEmail: document.querySelector("#newUserEmail"),
@@ -172,6 +189,12 @@ els.closeCompose.addEventListener("click", closeCompose);
 els.cancel.addEventListener("click", closeCompose);
 els.form.addEventListener("submit", saveTicket);
 els.aiChatForm.addEventListener("submit", sendAiChatMessage);
+els.settingsBack.addEventListener("click", showSettingsHome);
+els.settingsHome.addEventListener("click", openSettingsFromEvent);
+els.settingsDirectorySearch.addEventListener("input", () => {
+  settingsDirectorySearch = els.settingsDirectorySearch.value.trim().toLowerCase();
+  filterSettingsDirectory();
+});
 els.saveSettings.addEventListener("click", saveSettings);
 els.addPriority.addEventListener("click", () => addSettingRow("priority"));
 els.addStatus.addEventListener("click", () => addSettingRow("status"));
@@ -1165,10 +1188,43 @@ async function updateDetailField(field, value) {
   }
 }
 
+function showSettingsHome() {
+  activeSettingsPage = "home";
+  renderSettings();
+}
+
+function openSettingsFromEvent(event) {
+  const button = event.target.closest("[data-settings-open]");
+  if (!button) return;
+  const nextPage = button.dataset.settingsOpen;
+  const config = settingsPageConfig[nextPage];
+  if (!config) return;
+
+  activeSettingsPage = nextPage;
+  if (config.userMode) {
+    activeUserSettingsMode = config.userMode;
+    setNewUserDefaults();
+  }
+  renderSettings();
+}
+
+function filterSettingsDirectory() {
+  document.querySelectorAll(".settings-group").forEach((group) => {
+    group.hidden = settingsDirectorySearch !== "" && !group.textContent.toLowerCase().includes(settingsDirectorySearch);
+  });
+}
+
+function setNewUserDefaults() {
+  const isEndUserMode = activeUserSettingsMode === "end-users";
+  els.newUserRole.value = isEndUserMode ? "End User" : "Admin";
+  els.newUserIsTech.checked = !isEndUserMode;
+}
+
 function switchView(view) {
   const validViews = ["dashboard", "tickets", "reports", "ai-chat", "settings"];
   if (view === "settings" && !isAdmin()) view = "dashboard";
   activeView = validViews.includes(view) ? view : "dashboard";
+  if (activeView === "settings") activeSettingsPage = "home";
   activeTicketId = null;
   els.detailView.hidden = true;
   els.dashboardView.hidden = activeView !== "dashboard";
@@ -1239,10 +1295,36 @@ function renderReportList(counts, total) {
 
 function renderSettings() {
   if (!isAdmin()) return;
-  renderPrioritySettings();
-  renderStatusSettings();
-  renderCategorySettings();
-  renderUserSettings();
+  const config = settingsPageConfig[activeSettingsPage] || null;
+  const isHome = activeSettingsPage === "home" || !config;
+
+  if (!config && activeSettingsPage !== "home") activeSettingsPage = "home";
+
+  els.settingsTitle.textContent = isHome ? "Settings" : config.title;
+  els.settingsHome.hidden = !isHome;
+  els.settingsEditor.hidden = isHome;
+  els.settingsBack.hidden = isHome;
+  els.saveSettings.hidden = isHome || !config.canSave;
+
+  document.querySelectorAll("[data-settings-panel]").forEach((panel) => {
+    panel.hidden = isHome || panel.dataset.settingsPanel !== config.panel;
+  });
+
+  if (isHome) {
+    filterSettingsDirectory();
+    return;
+  }
+
+  if (config.userMode) {
+    activeUserSettingsMode = config.userMode;
+    els.userSettingsHeading.textContent = config.title;
+    renderUserSettings();
+    return;
+  }
+
+  if (config.panel === "priorities") renderPrioritySettings();
+  if (config.panel === "statuses") renderStatusSettings();
+  if (config.panel === "categories") renderCategorySettings();
 }
 
 function renderPrioritySettings() {
@@ -1286,7 +1368,14 @@ function renderCategorySettings() {
 }
 
 function renderUserSettings() {
-  els.userSettingsList.innerHTML = users.map((user) => {
+  const visibleUsers = users.filter(userMatchesSettingsMode);
+
+  if (!visibleUsers.length) {
+    els.userSettingsList.innerHTML = `<div class="empty-state">No ${activeUserSettingsMode === "end-users" ? "end users" : "admins"} yet</div>`;
+    return;
+  }
+
+  els.userSettingsList.innerHTML = visibleUsers.map((user) => {
     const roles = [...new Set(["Tier 1 Tech", "Tier 2 Tech", "Admin", "End User", user.role].filter(Boolean))];
     return `
       <div class="setting-row user-setting-row" data-user-id="${user.id}">
@@ -1302,6 +1391,12 @@ function renderUserSettings() {
       </div>
     `;
   }).join("");
+}
+
+function userMatchesSettingsMode(user) {
+  const role = (user.role || "").toLowerCase();
+  const isEndUser = role === "end user" || user.isTech === false;
+  return activeUserSettingsMode === "end-users" ? isEndUser : !isEndUser;
 }
 
 function addSettingRow(type) {
@@ -1397,7 +1492,7 @@ async function saveNewUser(event) {
     });
     users = result.users || users;
     els.addUserForm.reset();
-    els.newUserIsTech.checked = true;
+    setNewUserDefaults();
     renderUsers();
     renderAssigneeOptions();
     renderUserSettings();
