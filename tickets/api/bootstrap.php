@@ -81,6 +81,17 @@ function db(): PDO
     return $pdo;
 }
 
+function tickets_config(): array
+{
+    $configPath = tickets_config_path();
+    if (!is_file($configPath)) {
+        return [];
+    }
+
+    $config = require $configPath;
+    return is_array($config) ? $config : [];
+}
+
 function table_has_column(PDO $pdo, string $table, string $column): bool
 {
     $stmt = $pdo->prepare("SHOW COLUMNS FROM {$table} LIKE ?");
@@ -422,6 +433,12 @@ function app_base_url(): string
 
 function password_reset_from_email(): string
 {
+    $config = tickets_config();
+    $from = $config['password_reset_from_email'] ?? $config['smtp_from'] ?? $config['smtp_username'] ?? '';
+    if (is_string($from) && filter_var($from, FILTER_VALIDATE_EMAIL)) {
+        return strtolower($from);
+    }
+
     $host = (string) ($_SERVER['HTTP_HOST'] ?? 'weneedhelp.us');
     $host = preg_replace('/:\d+$/', '', $host) ?? 'weneedhelp.us';
     $host = preg_replace('/[^A-Za-z0-9.-]/', '', $host) ?? 'weneedhelp.us';
@@ -434,21 +451,209 @@ function password_reset_from_email(): string
 
 function send_password_reset_email(array $user, string $resetLink): bool
 {
-    if (!function_exists('mail')) {
-        return false;
-    }
-
     $subject = 'Ticket System password reset';
     $body = "A password reset was requested for your Ticket System account.\n\n"
         . "Use this link within 60 minutes to set a new password:\n"
         . $resetLink . "\n\n"
         . "If you did not request this, you can ignore this message.";
+    $to = (string) $user['email'];
+    $from = password_reset_from_email();
+    $fromName = 'Ticket System';
+
+    $smtp = password_reset_smtp_config();
+    if ($smtp) {
+        $smtpResult = smtp_send_ticket_message(
+            $smtp['host'],
+            $smtp['username'],
+            $smtp['password'],
+            $to,
+            $subject,
+            $body,
+            $smtp['from'] ?: $from,
+            $smtp['fromName'] ?: $fromName,
+            $smtp['ports'],
+            $smtp['verifyPeer']
+        );
+        if ($smtpResult['ok']) {
+            return true;
+        }
+        error_log('Ticket password reset SMTP failed: ' . ($smtpResult['error'] ?? 'unknown error'));
+    }
+
+    if (!function_exists('mail')) {
+        error_log('Ticket password reset email failed: PHP mail() is unavailable.');
+        return false;
+    }
+
     $headers = [
-        'From: Ticket System <' . password_reset_from_email() . '>',
+        'From: ' . format_mailbox_header($fromName, $from),
+        'Reply-To: ' . $from,
+        'Sender: ' . $from,
+        'MIME-Version: 1.0',
         'Content-Type: text/plain; charset=UTF-8',
+        'Content-Transfer-Encoding: 8bit',
     ];
 
-    return mail((string) $user['email'], $subject, $body, implode("\r\n", $headers));
+    $ok = @mail($to, $subject, $body, implode("\r\n", $headers), '-f' . $from);
+    if (!$ok) {
+        error_log('Ticket password reset email failed: PHP mail() returned false.');
+    }
+    return $ok;
+}
+
+function password_reset_smtp_config(): ?array
+{
+    $config = tickets_config();
+    $smtp = isset($config['smtp']) && is_array($config['smtp']) ? $config['smtp'] : [];
+    $host = trim((string) ($smtp['host'] ?? $config['smtp_host'] ?? ''));
+    $username = trim((string) ($smtp['username'] ?? $config['smtp_username'] ?? ''));
+    $password = (string) ($smtp['password'] ?? $config['smtp_password'] ?? '');
+    if ($host === '' || $username === '' || $password === '') {
+        return null;
+    }
+
+    $port = (int) ($smtp['port'] ?? $config['smtp_port'] ?? 0);
+    $ports = $port > 0 ? [$port] : [465, 587];
+    $from = trim((string) ($smtp['from'] ?? $config['smtp_from'] ?? $username));
+    if (!filter_var($from, FILTER_VALIDATE_EMAIL)) {
+        $from = $username;
+    }
+
+    return [
+        'host' => $host,
+        'username' => $username,
+        'password' => $password,
+        'from' => $from,
+        'fromName' => trim((string) ($smtp['from_name'] ?? $config['smtp_from_name'] ?? 'Ticket System')),
+        'ports' => $ports,
+        'verifyPeer' => (bool) ($smtp['verify_peer'] ?? $config['smtp_verify_peer'] ?? false),
+    ];
+}
+
+function smtp_send_ticket_message(string $host, string $username, string $password, string $to, string $subject, string $body, string $from, string $fromName, array $ports, bool $verifyPeer): array
+{
+    $lastResult = ['ok' => false, 'error' => 'SMTP connection failed.'];
+    foreach ($ports as $port) {
+        $lastResult = smtp_try_send_ticket_message($host, (int) $port, $username, $password, $to, $subject, $body, $from, $fromName, $verifyPeer);
+        if ($lastResult['ok']) {
+            return $lastResult;
+        }
+    }
+    return $lastResult;
+}
+
+function smtp_try_send_ticket_message(string $host, int $port, string $username, string $password, string $to, string $subject, string $body, string $from, string $fromName, bool $verifyPeer): array
+{
+    $context = stream_context_create([
+        'ssl' => [
+            'verify_peer' => $verifyPeer,
+            'verify_peer_name' => $verifyPeer,
+            'allow_self_signed' => !$verifyPeer,
+        ],
+    ]);
+    $target = $port === 465 ? "ssl://{$host}:{$port}" : "tcp://{$host}:{$port}";
+    $socket = @stream_socket_client($target, $errno, $errstr, 15, STREAM_CLIENT_CONNECT, $context);
+    if (!$socket) {
+        return ['ok' => false, 'error' => $errstr ?: "Could not connect to {$host}:{$port}."];
+    }
+
+    stream_set_timeout($socket, 15);
+    try {
+        smtp_expect_ticket_response($socket, [220]);
+        smtp_ticket_command($socket, 'EHLO ' . smtp_local_hostname(), [250]);
+
+        if ($port === 587) {
+            smtp_ticket_command($socket, 'STARTTLS', [220]);
+            if (!stream_socket_enable_crypto($socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
+                throw new RuntimeException('Could not start TLS encryption.');
+            }
+            smtp_ticket_command($socket, 'EHLO ' . smtp_local_hostname(), [250]);
+        }
+
+        smtp_ticket_command($socket, 'AUTH LOGIN', [334]);
+        smtp_ticket_command($socket, base64_encode($username), [334]);
+        smtp_ticket_command($socket, base64_encode($password), [235]);
+        smtp_ticket_command($socket, 'MAIL FROM:<' . $from . '>', [250]);
+        smtp_ticket_command($socket, 'RCPT TO:<' . $to . '>', [250, 251]);
+        smtp_ticket_command($socket, 'DATA', [354]);
+
+        $headers = [
+            'From: ' . format_mailbox_header($fromName, $from),
+            'Reply-To: ' . $from,
+            'Sender: ' . $from,
+            'To: ' . $to,
+            'Subject: ' . encode_mail_header($subject),
+            'Message-ID: <' . bin2hex(random_bytes(16)) . '@' . sender_domain_from_email($from) . '>',
+            'MIME-Version: 1.0',
+            'Content-Type: text/plain; charset=UTF-8',
+            'Content-Transfer-Encoding: 8bit',
+            'Date: ' . date(DATE_RFC2822),
+            'X-Mailer: Ticket System',
+        ];
+        $payload = implode("\r\n", $headers) . "\r\n\r\n" . dot_stuff_mail_body($body) . "\r\n.";
+        $response = smtp_ticket_command($socket, $payload, [250]);
+        smtp_ticket_command($socket, 'QUIT', [221]);
+        fclose($socket);
+        return ['ok' => true, 'response' => trim($response)];
+    } catch (Throwable $error) {
+        fclose($socket);
+        return ['ok' => false, 'error' => $error->getMessage()];
+    }
+}
+
+function smtp_ticket_command($socket, string $command, array $expectedCodes): string
+{
+    fwrite($socket, $command . "\r\n");
+    return smtp_expect_ticket_response($socket, $expectedCodes);
+}
+
+function smtp_expect_ticket_response($socket, array $expectedCodes): string
+{
+    $response = '';
+    while (($line = fgets($socket, 515)) !== false) {
+        $response .= $line;
+        if (isset($line[3]) && $line[3] === ' ') {
+            break;
+        }
+    }
+
+    $code = (int) substr($response, 0, 3);
+    if (!in_array($code, $expectedCodes, true)) {
+        throw new RuntimeException(trim($response) ?: 'Unexpected SMTP response.');
+    }
+    return $response;
+}
+
+function smtp_local_hostname(): string
+{
+    $host = (string) ($_SERVER['HTTP_HOST'] ?? 'localhost');
+    return preg_replace('/[^A-Za-z0-9.-]/', '', preg_replace('/:\d+$/', '', $host) ?? '') ?: 'localhost';
+}
+
+function format_mailbox_header(string $name, string $email): string
+{
+    return encode_mail_header($name) . ' <' . $email . '>';
+}
+
+function encode_mail_header(string $value): string
+{
+    if (function_exists('mb_encode_mimeheader')) {
+        return mb_encode_mimeheader($value, 'UTF-8');
+    }
+    return '=?UTF-8?B?' . base64_encode($value) . '?=';
+}
+
+function dot_stuff_mail_body(string $body): string
+{
+    $body = str_replace(["\r\n", "\r"], "\n", $body);
+    $body = preg_replace('/^\./m', '..', $body);
+    return str_replace("\n", "\r\n", (string) $body);
+}
+
+function sender_domain_from_email(string $email): string
+{
+    $parts = explode('@', $email);
+    return preg_replace('/[^A-Za-z0-9.-]/i', '', strtolower((string) end($parts))) ?: 'localhost';
 }
 
 function openai_api_key(): string
