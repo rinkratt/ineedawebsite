@@ -6,7 +6,7 @@
     <title>Ticket System</title>
     <link rel="icon" href="/favicon.ico?v=ineedawebsite-20260621" type="image/x-icon" sizes="any" />
     <link rel="shortcut icon" href="/favicon.ico?v=ineedawebsite-20260621" type="image/x-icon" />
-    <link rel="stylesheet" href="styles.css?v=20260627-category-rules" />
+    <link rel="stylesheet" href="styles.css?v=20260627-category-cascade" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -593,15 +593,15 @@
                   <div class="category-add-grid">
                     <label>
                       Category
-                      <input id="newCategoryName" list="categoryLevelOneOptions" placeholder="Please select or type new" required />
+                      <input id="newCategoryName" list="categoryAddLevelOneOptions" placeholder="Please select or type new" required />
                     </label>
                     <label>
                       Sub-Category
-                      <input id="newSubCategoryName" list="categoryLevelTwoOptions" placeholder="Please select or type new" required />
+                      <input id="newSubCategoryName" list="categoryAddLevelTwoOptions" placeholder="Please select or type new" required />
                     </label>
                     <label>
                       Third Level Category
-                      <input id="newThirdCategoryName" list="categoryLevelThreeOptions" placeholder="Please select or type new" />
+                      <input id="newThirdCategoryName" list="categoryAddLevelThreeOptions" placeholder="Please select or type new" />
                     </label>
                   </div>
                   <label>
@@ -622,6 +622,9 @@
                     <button class="secondary-button" type="submit" data-category-add-mode="new">Save & New</button>
                   </div>
                 </form>
+                <datalist id="categoryAddLevelOneOptions"></datalist>
+                <datalist id="categoryAddLevelTwoOptions"></datalist>
+                <datalist id="categoryAddLevelThreeOptions"></datalist>
                 <datalist id="categoryLevelOneOptions"></datalist>
                 <datalist id="categoryLevelTwoOptions"></datalist>
                 <datalist id="categoryLevelThreeOptions"></datalist>
@@ -797,6 +800,6 @@
     </aside>
 
     <script src="categories.js?v=20260626"></script>
-    <script src="app.js?v=20260627-category-rules"></script>
+    <script src="app.js?v=20260627-category-cascade"></script>
   </body>
 </html>

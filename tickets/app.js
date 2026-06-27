@@ -179,6 +179,9 @@ const els = {
   newCategoryRequest: document.querySelector("#newCategoryRequest"),
   newCategoryChange: document.querySelector("#newCategoryChange"),
   newCategoryProblem: document.querySelector("#newCategoryProblem"),
+  categoryAddLevelOneOptions: document.querySelector("#categoryAddLevelOneOptions"),
+  categoryAddLevelTwoOptions: document.querySelector("#categoryAddLevelTwoOptions"),
+  categoryAddLevelThreeOptions: document.querySelector("#categoryAddLevelThreeOptions"),
   categoryLevelOneOptions: document.querySelector("#categoryLevelOneOptions"),
   categoryLevelTwoOptions: document.querySelector("#categoryLevelTwoOptions"),
   categoryLevelThreeOptions: document.querySelector("#categoryLevelThreeOptions"),
@@ -232,6 +235,9 @@ els.categoryAddForm.addEventListener("click", (event) => {
   if (submitButton) categoryAddMode = submitButton.dataset.categoryAddMode || "done";
 });
 els.cancelCategoryAdd.addEventListener("click", hideCategoryAddForm);
+els.newCategoryName.addEventListener("input", updateCategoryAddLevelOptions);
+els.newSubCategoryName.addEventListener("input", updateCategoryAddLevelOptions);
+els.newThirdCategoryName.addEventListener("input", updateCategoryAddLevelOptions);
 els.addUserForm.addEventListener("submit", saveNewUser);
 els.prioritySettingsList.addEventListener("input", updateSettingFromEvent);
 els.prioritySettingsList.addEventListener("change", updateSettingFromEvent);
@@ -1436,10 +1442,49 @@ function uniqueCategoryValues(field) {
   return [...new Set(categoryOptions.map((category) => normalizeCategoryOption(category)[field]).filter(Boolean))].sort((a, b) => a.localeCompare(b));
 }
 
+function optionValueMarkup(values) {
+  return values.map((value) => `<option value="${escapeHtml(value)}"></option>`).join("");
+}
+
+function normalizeMatchValue(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function categoryAddMatchesSelection(option, field, selectedValue) {
+  const selected = normalizeMatchValue(selectedValue);
+  if (!selected) return true;
+  const value = normalizeMatchValue(normalizeCategoryOption(option)[field]);
+  return value === selected;
+}
+
+function uniqueCategoryValuesForSelection(field, filters = {}) {
+  const values = categoryOptions
+    .map(normalizeCategoryOption)
+    .filter((category) => {
+      return categoryAddMatchesSelection(category, "category", filters.category)
+        && categoryAddMatchesSelection(category, "subCategory", filters.subCategory);
+    })
+    .map((category) => category[field])
+    .filter(Boolean);
+  return [...new Set(values)].sort((a, b) => a.localeCompare(b));
+}
+
 function renderCategoryDatalists() {
-  els.categoryLevelOneOptions.innerHTML = uniqueCategoryValues("category").map((value) => `<option value="${escapeHtml(value)}"></option>`).join("");
-  els.categoryLevelTwoOptions.innerHTML = uniqueCategoryValues("subCategory").map((value) => `<option value="${escapeHtml(value)}"></option>`).join("");
-  els.categoryLevelThreeOptions.innerHTML = uniqueCategoryValues("thirdCategory").map((value) => `<option value="${escapeHtml(value)}"></option>`).join("");
+  els.categoryLevelOneOptions.innerHTML = optionValueMarkup(uniqueCategoryValues("category"));
+  els.categoryLevelTwoOptions.innerHTML = optionValueMarkup(uniqueCategoryValues("subCategory"));
+  els.categoryLevelThreeOptions.innerHTML = optionValueMarkup(uniqueCategoryValues("thirdCategory"));
+  updateCategoryAddLevelOptions();
+}
+
+function updateCategoryAddLevelOptions() {
+  const selectedCategory = els.newCategoryName.value.trim();
+  const selectedSubCategory = els.newSubCategoryName.value.trim();
+  els.categoryAddLevelOneOptions.innerHTML = optionValueMarkup(uniqueCategoryValues("category"));
+  els.categoryAddLevelTwoOptions.innerHTML = optionValueMarkup(uniqueCategoryValuesForSelection("subCategory", { category: selectedCategory }));
+  els.categoryAddLevelThreeOptions.innerHTML = optionValueMarkup(uniqueCategoryValuesForSelection("thirdCategory", {
+    category: selectedCategory,
+    subCategory: selectedSubCategory,
+  }));
 }
 
 function showCategoryAddForm() {
@@ -1463,6 +1508,7 @@ function resetCategoryAddForm() {
   els.newCategoryChange.checked = true;
   els.newCategoryProblem.checked = true;
   categoryAddMode = "done";
+  updateCategoryAddLevelOptions();
 }
 
 function categoryFromAddForm() {
