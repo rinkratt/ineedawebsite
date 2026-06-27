@@ -1138,7 +1138,13 @@ label textarea,
 .company-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  column-gap: 12px;
+  row-gap: 12px;
+  align-items: start;
+}
+
+.company-form-grid > label {
+  min-width: 0;
 }
 
 .company-field-wide,
@@ -1268,6 +1274,11 @@ label textarea,
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.company-portal-hint {
+  grid-column: 1 / -1;
+  margin-top: -8px;
 }
 
 .table-wrap {
