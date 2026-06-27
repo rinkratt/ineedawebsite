@@ -24,14 +24,16 @@ const fallbackCategories = [
 ];
 const defaultCompanyLogo = "/logo.png";
 const maxCompanyLogoBytes = 1500000;
+const portalRootDomain = "weneedhelp.us";
 const defaultBranding = {
-  workspaceLabel: "Workspace",
+  workspaceLabel: "workspace",
   appTitle: "Ticket System",
   logoName: "",
   logoDataUrl: "",
   logoUrl: defaultCompanyLogo,
   theme: "light",
 };
+const portalContext = detectPortalContext();
 const themeStorageKey = "ticket-system-theme";
 let categoryOptions = (Array.isArray(window.ticketCategories) && window.ticketCategories.length ? window.ticketCategories : fallbackCategories).map(normalizeCategoryOption);
 let companies = [];
@@ -39,6 +41,7 @@ let branding = normalizeBranding(defaultBranding);
 let activeCompanyId = null;
 let pendingCompanyLogoDataUrl = "";
 let pendingCompanyLogoName = "";
+let portalMode = portalContext.isPortal;
 
 const initialTheme = readStoredTheme();
 if (initialTheme) document.documentElement.dataset.theme = initialTheme;
@@ -80,6 +83,9 @@ const els = {
   appShell: document.querySelector("#appShell"),
   loginScreen: document.querySelector("#loginScreen"),
   loginForm: document.querySelector("#loginForm"),
+  loginTitle: document.querySelector("#loginTitle"),
+  loginIntro: document.querySelector("#loginIntro"),
+  loginPortalHint: document.querySelector("#loginPortalHint"),
   loginEmail: document.querySelector("#loginEmail"),
   loginPassword: document.querySelector("#loginPassword"),
   loginError: document.querySelector("#loginError"),
@@ -101,6 +107,16 @@ const els = {
   passwordChangeError: document.querySelector("#passwordChangeError"),
   currentUserName: document.querySelector("#currentUserName"),
   currentUserRole: document.querySelector("#currentUserRole"),
+  portalShell: document.querySelector("#portalShell"),
+  portalThemeToggle: document.querySelector("#portalThemeToggleButton"),
+  portalUserName: document.querySelector("#portalUserName"),
+  portalUserRole: document.querySelector("#portalUserRole"),
+  portalLogoutButton: document.querySelector("#portalLogoutButton"),
+  portalNewTicket: document.querySelector("#portalNewTicketButton"),
+  portalOpenCount: document.querySelector("#portalOpenCount"),
+  portalDoneCount: document.querySelector("#portalDoneCount"),
+  portalUrlLabel: document.querySelector("#portalUrlLabel"),
+  portalTicketList: document.querySelector("#portalTicketList"),
   themeToggle: document.querySelector("#themeToggleButton"),
   brandLogos: document.querySelectorAll("[data-brand-logo]"),
   brandWorkspaceLabels: document.querySelectorAll("[data-brand-workspace]"),
@@ -225,6 +241,7 @@ const els = {
   companyId: document.querySelector("#companyId"),
   companyName: document.querySelector("#companyName"),
   companyWorkspaceLabel: document.querySelector("#companyWorkspaceLabel"),
+  companyPortalUrl: document.querySelector("#companyPortalUrl"),
   companyAppTitle: document.querySelector("#companyAppTitle"),
   companyPhone: document.querySelector("#companyPhone"),
   companyAddress: document.querySelector("#companyAddress"),
@@ -251,8 +268,11 @@ els.backToLoginFromResetPassword.addEventListener("click", () => showLogin());
 els.passwordChangeForm.addEventListener("submit", changePassword);
 els.logoutButton.addEventListener("click", logout);
 els.themeToggle.addEventListener("click", toggleTheme);
+els.portalLogoutButton.addEventListener("click", logout);
+els.portalThemeToggle.addEventListener("click", toggleTheme);
 els.newTicket.addEventListener("click", () => openCompose());
 els.newTicketTop.addEventListener("click", () => openCompose());
+els.portalNewTicket.addEventListener("click", () => openCompose());
 els.dashboardNav.addEventListener("click", () => switchView("dashboard"));
 els.ticketsNav.addEventListener("click", () => switchView("tickets"));
 els.reportsNav.addEventListener("click", () => switchView("reports"));
@@ -292,6 +312,7 @@ els.newUserCompany.addEventListener("change", updateNewUserMonitorDefault);
 els.addCompany.addEventListener("click", startNewCompany);
 els.companySettingsList.addEventListener("click", selectCompanyFromEvent);
 els.companySettingsForm.addEventListener("submit", saveCompany);
+els.companyWorkspaceLabel.addEventListener("input", keepCompanyWorkspaceNameDnsSafe);
 els.companyLogoInput.addEventListener("change", readCompanyLogoFile);
 els.restoreCompanyLogo.addEventListener("click", restoreCompanyLogo);
 els.cancelCompany.addEventListener("click", renderCompanySettings);
@@ -348,6 +369,7 @@ async function loadApp() {
     const data = await apiRequest("action=bootstrap");
     applySettings(data.settings || {});
     currentUser = data.currentUser ? normalizeUser(data.currentUser) : null;
+    portalMode = Boolean(data.portalMode) || portalContext.isPortal;
     users = data.users?.length ? data.users.map(normalizeUser) : defaultUsers.map(normalizeUser);
     tickets = Array.isArray(data.tickets) ? data.tickets.map(normalizeTicket) : [];
     if (currentUser?.passwordResetRequired) {
@@ -368,7 +390,8 @@ async function loadApp() {
 
 async function loadPublicBranding() {
   try {
-    const result = await apiRequest("action=public-branding");
+    const portalQuery = portalContext.slug ? `&portal=${encodeURIComponent(portalContext.slug)}` : "";
+    const result = await apiRequest(`action=public-branding${portalQuery}`);
     applyBranding(result.branding || {});
   } catch (error) {
     console.error(error);
@@ -439,9 +462,11 @@ async function login(event) {
       body: JSON.stringify({
         email: els.loginEmail.value.trim(),
         password: els.loginPassword.value,
+        portalSlug: portalContext.slug,
       }),
     });
-    currentUser = result.user;
+    currentUser = normalizeUser(result.user);
+    portalMode = Boolean(result.portalMode) || portalContext.isPortal;
     els.loginPassword.value = "";
     if (currentUser?.passwordResetRequired) {
       showPasswordChange();
@@ -455,6 +480,7 @@ async function login(event) {
 
 function showPasswordResetRequest() {
   els.appShell.hidden = true;
+  els.portalShell.hidden = true;
   els.loginScreen.hidden = false;
   hideLoginForms();
   els.passwordResetRequestForm.hidden = false;
@@ -465,6 +491,7 @@ function showPasswordResetRequest() {
 
 function showPasswordReset(token) {
   els.appShell.hidden = true;
+  els.portalShell.hidden = true;
   els.loginScreen.hidden = false;
   hideLoginForms();
   els.passwordResetForm.hidden = false;
@@ -554,7 +581,7 @@ async function changePassword(event) {
         newPassword: nextPassword,
       }),
     });
-    currentUser = result.user;
+    currentUser = normalizeUser(result.user);
     els.passwordChangeForm.reset();
     await loadApp();
   } catch (error) {
@@ -570,14 +597,24 @@ async function logout() {
   }
   currentUser = null;
   tickets = [];
+  portalMode = portalContext.isPortal;
   showLogin();
 }
 
 function showLogin(message = "", isError = true) {
   els.appShell.hidden = true;
+  els.portalShell.hidden = true;
   els.loginScreen.hidden = false;
   hideLoginForms();
   els.loginForm.hidden = false;
+  document.body.classList.toggle("portal-entry", portalContext.isPortal);
+  document.body.classList.remove("portal-experience");
+  els.loginTitle.textContent = portalContext.isPortal ? "Portal sign in" : "Sign in";
+  els.loginIntro.textContent = portalContext.isPortal
+    ? "Use your customer portal account to open and track requests."
+    : "Use your team account to open the help desk.";
+  els.loginPortalHint.hidden = !portalContext.isPortal;
+  els.loginPortalHint.textContent = portalContext.isPortal ? portalUrlForWorkspace(portalContext.slug) : "";
   els.loginError.textContent = message;
   els.loginError.classList.toggle("success-message", !isError && message !== "");
   setFormMessage(els.resetRequestMessage);
@@ -589,6 +626,7 @@ function showLogin(message = "", isError = true) {
 
 function showPasswordChange(message = "") {
   els.appShell.hidden = true;
+  els.portalShell.hidden = true;
   els.loginScreen.hidden = false;
   hideLoginForms();
   els.passwordChangeForm.hidden = false;
@@ -598,7 +636,18 @@ function showPasswordChange(message = "") {
 
 function showApp() {
   els.loginScreen.hidden = true;
-  els.appShell.hidden = false;
+  const portalExperience = usesPortalExperience();
+  els.appShell.hidden = portalExperience;
+  els.portalShell.hidden = !portalExperience;
+  document.body.classList.toggle("portal-entry", portalContext.isPortal);
+  document.body.classList.toggle("portal-experience", portalExperience);
+  if (portalExperience) {
+    els.portalUserName.textContent = currentUser?.name || "Signed in";
+    els.portalUserRole.textContent = currentUser?.companyName || currentUser?.role || "Portal user";
+    renderPortal();
+    return;
+  }
+
   els.settingsNav.hidden = !isAdmin();
   if (!isAdmin() && activeView === "settings") activeView = "dashboard";
   els.currentUserName.textContent = currentUser?.name || "Signed in";
@@ -633,8 +682,10 @@ function activeTheme() {
 function applyTheme(theme = activeTheme()) {
   const nextTheme = normalizeTheme(theme);
   document.documentElement.dataset.theme = nextTheme;
-  els.themeToggle.setAttribute("aria-label", nextTheme === "dark" ? "Switch to light mode" : "Switch to dark mode");
-  els.themeToggle.title = nextTheme === "dark" ? "Switch to light mode" : "Switch to dark mode";
+  [els.themeToggle, els.portalThemeToggle].forEach((button) => {
+    button.setAttribute("aria-label", nextTheme === "dark" ? "Switch to light mode" : "Switch to dark mode");
+    button.title = nextTheme === "dark" ? "Switch to light mode" : "Switch to dark mode";
+  });
 }
 
 function toggleTheme() {
@@ -643,8 +694,61 @@ function toggleTheme() {
   applyTheme(nextTheme);
 }
 
+function normalizeWorkspaceName(value = "", fallback = "workspace") {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 63)
+    .replace(/-$/g, "");
+  return normalized || fallback;
+}
+
+function detectPortalContext() {
+  const params = new URLSearchParams(window.location.search);
+  const querySlug = normalizeWorkspaceName(params.get("portal") || "", "");
+  if (querySlug) {
+    return { isPortal: true, slug: querySlug };
+  }
+
+  const host = window.location.hostname.toLowerCase();
+  const suffix = `.${portalRootDomain}`;
+  if (host.endsWith(suffix)) {
+    const subdomain = host.slice(0, -suffix.length);
+    const label = subdomain.split(".").pop() || "";
+    const slug = normalizeWorkspaceName(label, "");
+    if (slug && slug !== "www") {
+      return { isPortal: true, slug };
+    }
+  }
+
+  return { isPortal: false, slug: "" };
+}
+
+function portalUrlForWorkspace(workspaceName = branding.workspaceLabel) {
+  return `https://${normalizeWorkspaceName(workspaceName)}.${portalRootDomain}`;
+}
+
+function keepCompanyWorkspaceNameDnsSafe() {
+  const input = els.companyWorkspaceLabel;
+  const original = input.value;
+  const cursor = input.selectionStart ?? original.length;
+  const next = normalizeWorkspaceName(original, "");
+  if (next === original) {
+    updateCompanyPortalUrl();
+    return;
+  }
+
+  const nextCursor = Math.min(normalizeWorkspaceName(original.slice(0, cursor), "").length, next.length);
+  input.value = next;
+  input.setSelectionRange(nextCursor, nextCursor);
+  updateCompanyPortalUrl();
+}
+
 function normalizeBranding(nextBranding = {}) {
-  const workspaceLabel = String(nextBranding.workspaceLabel || nextBranding.workspace_label || defaultBranding.workspaceLabel).trim() || defaultBranding.workspaceLabel;
+  const workspaceLabel = normalizeWorkspaceName(nextBranding.workspaceLabel || nextBranding.workspace_label || defaultBranding.workspaceLabel, defaultBranding.workspaceLabel);
   const appTitle = String(nextBranding.appTitle || nextBranding.app_title || defaultBranding.appTitle).trim() || defaultBranding.appTitle;
   return {
     workspaceLabel,
@@ -683,6 +787,10 @@ function actorName() {
 
 function isAdmin() {
   return (currentUser?.role || "").toLowerCase().includes("admin");
+}
+
+function usesPortalExperience() {
+  return portalMode || (currentUser?.portalAccess && currentUser?.isTech === false);
 }
 
 function applySettings(settings = {}) {
@@ -784,6 +892,7 @@ function normalizeUser(user = {}) {
     role,
     companyId,
     companyName: String(user.companyName || user.company_name || companyById(companyId)?.name || ""),
+    companyWorkspace: normalizeWorkspaceName(user.companyWorkspace || user.company_workspace_label || companyById(companyId)?.workspaceLabel || "", ""),
     active: user.active !== false && user.active !== 0,
     isTech: rawIsTech === undefined ? !isEndUser : Boolean(rawIsTech),
     portalAccess: rawPortalAccess === undefined ? (isAdminRole || isEndUser) : Boolean(rawPortalAccess),
@@ -837,6 +946,7 @@ function starterTickets() {
 function normalizeTicket(ticket) {
   return {
     id: Number(ticket.id),
+    companyId: ticket.companyId || ticket.company_id ? Number(ticket.companyId || ticket.company_id) : null,
     type: ticket.type || "Request",
     title: ticket.title || "Untitled ticket",
     status: ticket.status || statusOptions[0] || "New",
@@ -859,7 +969,44 @@ function normalizeTicket(ticket) {
   };
 }
 
+function renderPortal() {
+  const openTickets = tickets.filter((ticket) => !resolvedStatuses.includes(ticket.status));
+  const doneTickets = tickets.filter((ticket) => resolvedStatuses.includes(ticket.status));
+  const workspace = portalContext.slug || currentUser?.companyWorkspace || branding.workspaceLabel;
+
+  els.portalOpenCount.textContent = openTickets.length;
+  els.portalDoneCount.textContent = doneTickets.length;
+  els.portalUrlLabel.textContent = normalizeWorkspaceName(workspace);
+
+  const sortedTickets = [...tickets].sort((a, b) => b.id - a.id);
+  els.portalTicketList.innerHTML = sortedTickets.length
+    ? sortedTickets.map(renderPortalTicketCard).join("")
+    : `<div class="empty-state">No tickets yet</div>`;
+}
+
+function renderPortalTicketCard(ticket) {
+  return `
+    <article class="portal-ticket-card">
+      <div>
+        <strong>#${ticket.id} ${escapeHtml(ticket.title)}</strong>
+        <span>${escapeHtml([ticket.category, ticket.subCategory, ticket.thirdCategory].filter(Boolean).join(" > "))}</span>
+      </div>
+      <div class="portal-ticket-meta">
+        <span class="status-pill">${escapeHtml(ticket.status)}</span>
+        <small>${formatDate(ticket.requestTime)}</small>
+      </div>
+    </article>
+  `;
+}
+
 function render() {
+  if (usesPortalExperience()) {
+    renderFilterOptions();
+    renderCategoryOptions(els.categoryInput.value);
+    renderPortal();
+    return;
+  }
+
   renderFilterOptions();
   renderAssigneeOptions();
   renderTypeFilters();
@@ -932,7 +1079,7 @@ function normalizeCompany(company = {}) {
     zip: String(company.zip || ""),
     phone: String(company.phone || ""),
     notes: String(company.notes || ""),
-    workspaceLabel: String(company.workspaceLabel || company.workspace_label || "Workspace"),
+    workspaceLabel: normalizeWorkspaceName(company.workspaceLabel || company.workspace_label || "Workspace"),
     appTitle: String(company.appTitle || company.app_title || "Ticket System"),
     logoName: String(company.logoName || company.logo_name || ""),
     logoDataUrl: String(company.logoDataUrl || company.logo_data_url || ""),
@@ -944,7 +1091,7 @@ function normalizeCompany(company = {}) {
 
 function blankCompany() {
   return normalizeCompany({
-    workspaceLabel: "Workspace",
+    workspaceLabel: "workspace",
     appTitle: "Ticket System",
     logoUrl: defaultCompanyLogo,
     theme: "light",
@@ -1001,7 +1148,8 @@ function categorySupportsTicketType(option, type) {
 function activeCategoryOptions(type = els.typeInput?.value || "Incident") {
   return categoryOptions.filter((option) => {
     const normalized = normalizeCategoryOption(option);
-    return normalized.active !== false && normalized.visibleAdmin !== false && categorySupportsTicketType(normalized, type);
+    const visible = usesPortalExperience() ? normalized.visibleSsp !== false : normalized.visibleAdmin !== false;
+    return normalized.active !== false && visible && categorySupportsTicketType(normalized, type);
   });
 }
 
@@ -1350,12 +1498,15 @@ function cleanCitationUrl(url) {
 }
 
 function openCompose(ticket = null) {
+  const portalExperience = usesPortalExperience();
   const selectedPriority = ticket?.priority || priorityOptions[priorityOptions.length - 1] || "P5-Low";
   const selectedStatus = ticket?.status || statusOptions[0] || "New";
   els.composePanel.hidden = false;
+  els.composePanel.classList.toggle("portal-compose", portalExperience);
   els.ticketId.value = ticket?.id || "";
-  els.titleInput.value = ticket?.title || "DEFAULT";
-  els.typeInput.value = ticket?.type || "Incident";
+  els.titleInput.value = ticket?.title || "";
+  els.titleInput.placeholder = portalExperience ? "Briefly describe what you need" : "DEFAULT";
+  els.typeInput.value = ticket?.type || (portalExperience ? "Request" : "Incident");
   const selectedCategory = ticket ? categoryOptionFromTicket(ticket) : activeCategoryOptions(els.typeInput.value)[0] || categoryOptions[0];
   const selectedCategoryKey = categoryOptionKey(selectedCategory);
   els.templateInput.value = ticket?.template || "DEFAULT";
@@ -1414,6 +1565,10 @@ async function saveTicket(event) {
       ? tickets.map((ticket) => (ticket.id === nextTicket.id ? nextTicket : ticket))
       : [nextTicket, ...tickets];
     closeCompose();
+    if (usesPortalExperience()) {
+      render();
+      return;
+    }
     render();
     showDetail(nextTicket.id);
   } catch (error) {
@@ -1841,7 +1996,7 @@ function renderCompanyList() {
     return `
       <button class="company-list-item${company.id === activeCompanyId ? " active" : ""}" type="button" data-company-id="${company.id}">
         <strong>${escapeHtml(company.name || "Unnamed company")}</strong>
-        <span>${escapeHtml(location || "No location")}</span>
+        <span>${escapeHtml(company.workspaceLabel ? portalUrlForWorkspace(company.workspaceLabel) : (location || "No location"))}</span>
         <small>${company.active ? "Active" : "Inactive"} - ${company.theme === "dark" ? "Dark" : "Light"} theme</small>
       </button>
     `;
@@ -1877,6 +2032,7 @@ function renderCompanyForm(company) {
   els.companyId.value = normalized.id || "";
   els.companyName.value = normalized.name;
   els.companyWorkspaceLabel.value = normalized.workspaceLabel;
+  updateCompanyPortalUrl();
   els.companyAppTitle.value = normalized.appTitle;
   els.companyPhone.value = normalized.phone;
   els.companyAddress.value = normalized.address;
@@ -1897,6 +2053,11 @@ function updateCompanyLogoPreview() {
   els.companyLogoName.textContent = hasUploadedLogo
     ? pendingCompanyLogoName || "Uploaded logo"
     : "Default logo";
+}
+
+function updateCompanyPortalUrl() {
+  if (!els.companyPortalUrl) return;
+  els.companyPortalUrl.textContent = portalUrlForWorkspace(els.companyWorkspaceLabel.value || "workspace");
 }
 
 function readCompanyLogoFile(event) {
@@ -1938,7 +2099,7 @@ function collectCompanyForm() {
   return normalizeCompany({
     id: Number(els.companyId.value) || null,
     name: els.companyName.value.trim(),
-    workspaceLabel: els.companyWorkspaceLabel.value.trim() || "Workspace",
+    workspaceLabel: normalizeWorkspaceName(els.companyWorkspaceLabel.value),
     appTitle: els.companyAppTitle.value.trim() || "Ticket System",
     phone: els.companyPhone.value.trim(),
     address: els.companyAddress.value.trim(),

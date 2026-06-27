@@ -178,10 +178,131 @@ button {
   padding: 2px 0;
 }
 
+.login-portal-hint {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0 10px;
+  color: var(--ink);
+  background: var(--panel-soft);
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
 .app-shell {
   display: grid;
   min-height: 100vh;
   grid-template-columns: 280px minmax(0, 1fr);
+}
+
+.portal-shell {
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+.portal-header {
+  display: flex;
+  min-height: 78px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid var(--line);
+  padding: 14px clamp(18px, 4vw, 42px);
+  background: var(--panel);
+}
+
+.portal-account {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.portal-account div {
+  display: grid;
+  gap: 3px;
+  text-align: right;
+}
+
+.portal-account small {
+  color: var(--muted);
+}
+
+.portal-main {
+  display: grid;
+  width: min(1120px, 100%);
+  gap: 22px;
+  margin: 0 auto;
+  padding: 28px;
+}
+
+.portal-hero {
+  display: flex;
+  min-height: 170px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: clamp(20px, 4vw, 34px);
+  background: var(--panel);
+}
+
+.portal-hero div {
+  display: grid;
+  gap: 10px;
+}
+
+.portal-hero p:not(.eyebrow) {
+  color: var(--muted);
+}
+
+.portal-ticket-list {
+  display: grid;
+  gap: 10px;
+}
+
+.portal-ticket-card {
+  display: grid;
+  min-height: 76px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  background: var(--panel-soft);
+}
+
+.portal-ticket-card div:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.portal-ticket-card strong,
+.portal-ticket-card span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.portal-ticket-card span,
+.portal-ticket-card small {
+  color: var(--muted);
+}
+
+.portal-ticket-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.portal-metrics .metric strong {
+  overflow-wrap: anywhere;
+  font-size: 1.35rem;
 }
 
 .sidebar {
@@ -413,6 +534,7 @@ h3 {
 }
 
 .app-shell[hidden],
+.portal-shell[hidden],
 .login-screen[hidden],
 .login-form[hidden],
 .dashboard-view[hidden],
@@ -423,6 +545,10 @@ h3 {
 .ticket-detail[hidden],
 .filter-panel[hidden],
 .compose-panel[hidden] {
+  display: none;
+}
+
+.compose-panel.portal-compose .tech-only-field {
   display: none;
 }
 
@@ -1135,6 +1261,15 @@ label textarea,
   margin: 0;
 }
 
+.field-hint {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .table-wrap {
   overflow: auto;
 }
@@ -1781,6 +1916,20 @@ dd {
   .quick-filters {
     min-width: 0;
   }
+
+  .portal-header,
+  .portal-hero {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .portal-account {
+    justify-content: space-between;
+  }
+
+  .portal-account div {
+    text-align: left;
+  }
 }
 
 @media (max-width: 720px) {
@@ -1824,6 +1973,18 @@ dd {
 
   .company-logo-preview {
     width: 100%;
+  }
+
+  .portal-main {
+    padding: 18px;
+  }
+
+  .portal-ticket-card {
+    grid-template-columns: 1fr;
+  }
+
+  .portal-ticket-meta {
+    justify-content: space-between;
   }
 
   .company-form-actions {

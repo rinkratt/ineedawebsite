@@ -99,6 +99,13 @@ function table_has_column(PDO $pdo, string $table, string $column): bool
     return (bool) $stmt->fetch();
 }
 
+function table_exists(PDO $pdo, string $table): bool
+{
+    $stmt = $pdo->prepare('SHOW TABLES LIKE ?');
+    $stmt->execute([$table]);
+    return (bool) $stmt->fetch();
+}
+
 function users_table_has_column(PDO $pdo, string $column): bool
 {
     return table_has_column($pdo, 'users', $column);
@@ -112,6 +119,41 @@ function ticket_categories_table_has_column(PDO $pdo, string $column): bool
 function companies_table_has_column(PDO $pdo, string $column): bool
 {
     return table_has_column($pdo, 'companies', $column);
+}
+
+function tickets_table_has_column(PDO $pdo, string $column): bool
+{
+    return table_exists($pdo, 'tickets') && table_has_column($pdo, 'tickets', $column);
+}
+
+function table_has_index(PDO $pdo, string $table, string $index): bool
+{
+    if (!table_exists($pdo, $table)) {
+        return false;
+    }
+
+    $stmt = $pdo->prepare("SHOW INDEX FROM {$table} WHERE Key_name = ?");
+    $stmt->execute([$index]);
+    return (bool) $stmt->fetch();
+}
+
+function normalize_workspace_label(mixed $value, string $fallback = 'workspace'): string
+{
+    $text = strtolower(trim((string) $value));
+    $text = preg_replace('/[^a-z0-9]+/', '-', $text);
+    if (!is_string($text)) {
+        $text = '';
+    }
+    $text = trim(preg_replace('/-+/', '-', $text) ?? '', '-');
+
+    if (function_exists('mb_substr')) {
+        $text = mb_substr($text, 0, 63);
+    } else {
+        $text = substr($text, 0, 63);
+    }
+    $text = trim($text, '-');
+
+    return $text !== '' ? $text : $fallback;
 }
 
 function ensure_password_reset_schema(PDO $pdo): void
@@ -227,7 +269,7 @@ function ensure_settings_schema(PDO $pdo): void
             zip VARCHAR(30) NOT NULL DEFAULT '',
             phone VARCHAR(60) NOT NULL DEFAULT '',
             notes TEXT NULL,
-            workspace_label VARCHAR(80) NOT NULL DEFAULT 'Workspace',
+            workspace_label VARCHAR(80) NOT NULL DEFAULT 'workspace',
             app_title VARCHAR(120) NOT NULL DEFAULT 'Ticket System',
             logo_name VARCHAR(190) NOT NULL DEFAULT '',
             logo_data_url MEDIUMTEXT NULL,
@@ -286,7 +328,7 @@ function ensure_settings_schema(PDO $pdo): void
         $pdo->exec('ALTER TABLE companies ADD COLUMN notes TEXT NULL AFTER phone');
     }
     if (!companies_table_has_column($pdo, 'workspace_label')) {
-        $pdo->exec("ALTER TABLE companies ADD COLUMN workspace_label VARCHAR(80) NOT NULL DEFAULT 'Workspace' AFTER notes");
+        $pdo->exec("ALTER TABLE companies ADD COLUMN workspace_label VARCHAR(80) NOT NULL DEFAULT 'workspace' AFTER notes");
     }
     if (!companies_table_has_column($pdo, 'app_title')) {
         $pdo->exec("ALTER TABLE companies ADD COLUMN app_title VARCHAR(120) NOT NULL DEFAULT 'Ticket System' AFTER workspace_label");
@@ -317,7 +359,9 @@ function ensure_settings_schema(PDO $pdo): void
     seed_ticket_statuses($pdo);
     seed_ticket_categories($pdo);
     seed_default_company($pdo);
+    normalize_company_workspace_labels($pdo);
     assign_default_company_to_users($pdo);
+    ensure_ticket_company_schema($pdo);
 
     $checked = true;
 }
@@ -401,13 +445,50 @@ function seed_default_company(PDO $pdo): void
     ');
     $stmt->execute([
         'Weneedhelp',
-        'Weneedhelp Tech Space',
+        'weneedhelp',
         'Ticket System',
         '',
         '',
         '/logo.png',
         'light',
     ]);
+}
+
+function ensure_ticket_company_schema(PDO $pdo): void
+{
+    if (!table_exists($pdo, 'tickets')) {
+        return;
+    }
+
+    if (!tickets_table_has_column($pdo, 'company_id')) {
+        $pdo->exec('ALTER TABLE tickets ADD COLUMN company_id INT NULL AFTER id');
+    }
+
+    $companyId = default_company_id($pdo);
+    if ($companyId) {
+        $pdo->prepare('UPDATE tickets SET company_id = ? WHERE company_id IS NULL OR company_id = 0')->execute([$companyId]);
+    }
+
+    if (!table_has_index($pdo, 'tickets', 'idx_ticket_company')) {
+        $pdo->exec('ALTER TABLE tickets ADD INDEX idx_ticket_company (company_id)');
+    }
+}
+
+function normalize_company_workspace_labels(PDO $pdo): void
+{
+    $rows = $pdo->query('SELECT id, workspace_label FROM companies')->fetchAll();
+    if (!$rows) {
+        return;
+    }
+
+    $stmt = $pdo->prepare('UPDATE companies SET workspace_label = ? WHERE id = ?');
+    foreach ($rows as $row) {
+        $current = (string) ($row['workspace_label'] ?? '');
+        $normalized = normalize_workspace_label($current);
+        if ($normalized !== $current) {
+            $stmt->execute([$normalized, (int) $row['id']]);
+        }
+    }
 }
 
 function default_company_id(PDO $pdo): ?int
@@ -433,6 +514,54 @@ function company_is_weneedhelp(PDO $pdo, ?int $companyId): bool
     $stmt->execute([$companyId]);
     $name = $stmt->fetchColumn();
     return is_string($name) && strtolower(trim($name)) === 'weneedhelp';
+}
+
+function company_by_workspace_label(PDO $pdo, string $workspaceLabel): ?array
+{
+    $slug = normalize_workspace_label($workspaceLabel, '');
+    if ($slug === '') {
+        return null;
+    }
+
+    $stmt = $pdo->prepare('
+        SELECT id, name, workspace_label, app_title, logo_name, logo_data_url, logo_url, theme, active
+        FROM companies
+        WHERE workspace_label = ? AND active = 1
+        LIMIT 1
+    ');
+    $stmt->execute([$slug]);
+    $company = $stmt->fetch();
+    return $company ?: null;
+}
+
+function user_can_access_portal_company(array $user, int $companyId): bool
+{
+    if (empty($user['portal_access'])) {
+        return false;
+    }
+
+    $userCompanyId = isset($user['company_id']) ? (int) $user['company_id'] : 0;
+    return $userCompanyId === $companyId || !empty($user['can_monitor_companies']);
+}
+
+function user_uses_portal_layout(array $user): bool
+{
+    $role = strtolower((string) ($user['role'] ?? ''));
+    return empty($user['is_tech']) && $role === 'end user';
+}
+
+function portal_company_id_for_user(array $user): ?int
+{
+    $sessionCompanyId = isset($_SESSION['ticket_portal_company_id']) ? (int) $_SESSION['ticket_portal_company_id'] : 0;
+    if ($sessionCompanyId > 0 && user_can_access_portal_company($user, $sessionCompanyId)) {
+        return $sessionCompanyId;
+    }
+
+    if (user_uses_portal_layout($user) && !empty($user['company_id'])) {
+        return (int) $user['company_id'];
+    }
+
+    return null;
 }
 
 function assign_default_company_to_users(PDO $pdo): void
@@ -478,6 +607,7 @@ function public_user(array $user): array
         'role' => (string) $user['role'],
         'companyId' => isset($user['company_id']) && $user['company_id'] !== null ? (int) $user['company_id'] : null,
         'companyName' => (string) ($user['company_name'] ?? ''),
+        'companyWorkspace' => normalize_workspace_label($user['company_workspace_label'] ?? '', ''),
         'active' => !isset($user['active']) || !empty($user['active']),
         'isTech' => !isset($user['is_tech']) || !empty($user['is_tech']),
         'portalAccess' => !empty($user['portal_access']),
@@ -494,6 +624,7 @@ function current_user(PDO $pdo): ?array
 
     $stmt = $pdo->prepare('
         SELECT users.id, users.name, users.email, users.role, users.company_id, companies.name AS company_name,
+            companies.workspace_label AS company_workspace_label,
             users.active, users.is_tech, users.portal_access, users.can_monitor_companies, users.password_reset_required
         FROM users
         LEFT JOIN companies ON companies.id = users.company_id
@@ -536,12 +667,13 @@ function destroy_session_cookie(): void
 function db_ticket_to_api(array $ticket): array
 {
     $ticket['id'] = (int) $ticket['id'];
+    $ticket['companyId'] = isset($ticket['company_id']) && $ticket['company_id'] !== null ? (int) $ticket['company_id'] : null;
     $ticket['requestTime'] = $ticket['request_time'];
     $ticket['requestUser'] = $ticket['request_user'];
     $ticket['subCategory'] = $ticket['sub_category'];
     $ticket['thirdCategory'] = $ticket['third_category'];
     $ticket['modifyUser'] = $ticket['modify_user'];
-    unset($ticket['request_time'], $ticket['request_user'], $ticket['sub_category'], $ticket['third_category'], $ticket['modify_user']);
+    unset($ticket['company_id'], $ticket['request_time'], $ticket['request_user'], $ticket['sub_category'], $ticket['third_category'], $ticket['modify_user']);
     $ticket['journey'] = [];
     $ticket['attachments'] = [];
     $ticket['related'] = [];
@@ -626,7 +758,7 @@ function companies_payload(PDO $pdo): array
             'zip' => (string) $company['zip'],
             'phone' => (string) $company['phone'],
             'notes' => (string) ($company['notes'] ?? ''),
-            'workspaceLabel' => (string) ($company['workspace_label'] ?: 'Workspace'),
+            'workspaceLabel' => normalize_workspace_label($company['workspace_label'] ?? 'workspace'),
             'appTitle' => (string) ($company['app_title'] ?: 'Ticket System'),
             'logoName' => (string) $company['logo_name'],
             'logoDataUrl' => (string) ($company['logo_data_url'] ?? ''),
@@ -637,19 +769,30 @@ function companies_payload(PDO $pdo): array
     }, $rows);
 }
 
-function branding_payload(PDO $pdo): array
+function branding_payload(PDO $pdo, string $workspaceLabel = ''): array
 {
-    $stmt = $pdo->query('
-        SELECT name, workspace_label, app_title, logo_name, logo_data_url, logo_url, theme
-        FROM companies
-        WHERE active = 1
-        ORDER BY name, id
-        LIMIT 1
-    ');
+    $slug = normalize_workspace_label($workspaceLabel, '');
+    if ($slug !== '') {
+        $stmt = $pdo->prepare('
+            SELECT name, workspace_label, app_title, logo_name, logo_data_url, logo_url, theme
+            FROM companies
+            WHERE active = 1 AND workspace_label = ?
+            LIMIT 1
+        ');
+        $stmt->execute([$slug]);
+    } else {
+        $stmt = $pdo->query('
+            SELECT name, workspace_label, app_title, logo_name, logo_data_url, logo_url, theme
+            FROM companies
+            WHERE active = 1
+            ORDER BY name, id
+            LIMIT 1
+        ');
+    }
     $company = $stmt->fetch();
     if (!$company) {
         return [
-            'workspaceLabel' => 'Workspace',
+            'workspaceLabel' => 'workspace',
             'appTitle' => 'Ticket System',
             'logoName' => '',
             'logoDataUrl' => '',
@@ -660,7 +803,7 @@ function branding_payload(PDO $pdo): array
 
     $theme = (string) ($company['theme'] ?? 'light');
     return [
-        'workspaceLabel' => (string) ($company['workspace_label'] ?: 'Workspace'),
+        'workspaceLabel' => normalize_workspace_label($company['workspace_label'] ?? 'workspace'),
         'appTitle' => (string) ($company['app_title'] ?: 'Ticket System'),
         'logoName' => (string) ($company['logo_name'] ?? ''),
         'logoDataUrl' => (string) ($company['logo_data_url'] ?? ''),
@@ -673,6 +816,7 @@ function users_payload(PDO $pdo): array
 {
     $users = $pdo->query('
         SELECT users.id, users.name, users.email, users.role, users.company_id, companies.name AS company_name,
+            companies.workspace_label AS company_workspace_label,
             users.active, users.is_tech, users.portal_access, users.can_monitor_companies, users.password_reset_required
         FROM users
         LEFT JOIN companies ON companies.id = users.company_id

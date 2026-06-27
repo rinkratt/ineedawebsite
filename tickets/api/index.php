@@ -120,7 +120,7 @@ function normalize_company_payload(array $body): array
         'zip' => trim_to_limit($body['zip'] ?? '', 30),
         'phone' => trim_to_limit($body['phone'] ?? '', 60),
         'notes' => trim_to_limit($body['notes'] ?? '', 2000),
-        'workspaceLabel' => trim_to_limit($body['workspaceLabel'] ?? $body['workspace_label'] ?? 'Workspace', 80) ?: 'Workspace',
+        'workspaceLabel' => normalize_workspace_label($body['workspaceLabel'] ?? $body['workspace_label'] ?? 'workspace'),
         'appTitle' => trim_to_limit($body['appTitle'] ?? $body['app_title'] ?? 'Ticket System', 120) ?: 'Ticket System',
         'logoName' => $logoDataUrl === '' ? '' : trim_to_limit($body['logoName'] ?? $body['logo_name'] ?? '', 190),
         'logoDataUrl' => $logoDataUrl,
@@ -128,6 +128,28 @@ function normalize_company_payload(array $body): array
         'theme' => $theme,
         'active' => !array_key_exists('active', $body) || !empty($body['active']),
     ];
+}
+
+function ticket_scope_for_user(array $user): array
+{
+    $portalCompanyId = portal_company_id_for_user($user);
+    if (!$portalCompanyId) {
+        return ['', []];
+    }
+
+    if (is_admin_user($user) || !empty($user['can_monitor_companies'])) {
+        return [' WHERE company_id = ?', [$portalCompanyId]];
+    }
+
+    return [' WHERE company_id = ? AND LOWER(request_user) = LOWER(?)', [$portalCompanyId, (string) ($user['name'] ?? '')]];
+}
+
+function ticket_is_visible_to_user(PDO $pdo, array $user, int $ticketId): bool
+{
+    [$where, $params] = ticket_scope_for_user($user);
+    $stmt = $pdo->prepare('SELECT id FROM tickets' . ($where ? $where . ' AND id = ?' : ' WHERE id = ?') . ' LIMIT 1');
+    $stmt->execute([...$params, $ticketId]);
+    return (bool) $stmt->fetch();
 }
 
 try {
@@ -140,13 +162,20 @@ try {
         $body = read_json_body();
         $email = trim((string) ($body['email'] ?? ''));
         $password = (string) ($body['password'] ?? '');
+        $portalSlug = normalize_workspace_label($body['portalSlug'] ?? '', '');
+        $portalCompany = $portalSlug === '' ? null : company_by_workspace_label($pdo, $portalSlug);
 
         if ($email === '' || $password === '') {
             json_response(['error' => 'Email and password are required'], 400);
         }
 
+        if ($portalSlug !== '' && !$portalCompany) {
+            json_response(['error' => 'This customer portal is not set up yet.'], 404);
+        }
+
         $stmt = $pdo->prepare('
             SELECT users.id, users.name, users.email, users.role, users.company_id, companies.name AS company_name,
+                companies.workspace_label AS company_workspace_label,
                 users.active, users.is_tech, users.portal_access, users.can_monitor_companies, users.password_hash, users.password_reset_required
             FROM users
             LEFT JOIN companies ON companies.id = users.company_id
@@ -161,11 +190,24 @@ try {
             json_response(['error' => 'Invalid email or password'], 401);
         }
 
+        if ($portalCompany && !user_can_access_portal_company($user, (int) $portalCompany['id'])) {
+            json_response(['error' => 'Your account does not have access to this customer portal.'], 403);
+        }
+
         session_regenerate_id(true);
         $_SESSION['ticket_user_id'] = (int) $user['id'];
+        if ($portalCompany) {
+            $_SESSION['ticket_portal_company_id'] = (int) $portalCompany['id'];
+            $_SESSION['ticket_portal_slug'] = (string) $portalCompany['workspace_label'];
+        } else {
+            unset($_SESSION['ticket_portal_company_id'], $_SESSION['ticket_portal_slug']);
+        }
         $pdo->prepare('UPDATE users SET last_login_at = NOW() WHERE id = ?')->execute([(int) $user['id']]);
 
-        json_response(['user' => public_user($user)]);
+        json_response([
+            'user' => public_user($user),
+            'portalMode' => (bool) $portalCompany,
+        ]);
     }
 
     if ($action === 'logout') {
@@ -174,7 +216,7 @@ try {
     }
 
     if ($action === 'public-branding') {
-        json_response(['branding' => branding_payload($pdo)]);
+        json_response(['branding' => branding_payload($pdo, (string) ($_GET['portal'] ?? ''))]);
     }
 
     if ($action === 'request-password-reset') {
@@ -261,6 +303,7 @@ try {
 
         $stmt = $pdo->prepare('
             SELECT users.id, users.name, users.email, users.role, users.company_id, companies.name AS company_name,
+                companies.workspace_label AS company_workspace_label,
                 users.active, users.is_tech, users.portal_access, users.can_monitor_companies, users.password_hash, users.password_reset_required
             FROM users
             LEFT JOIN companies ON companies.id = users.company_id
@@ -278,6 +321,7 @@ try {
 
         $stmt = $pdo->prepare('
             SELECT users.id, users.name, users.email, users.role, users.company_id, companies.name AS company_name,
+                companies.workspace_label AS company_workspace_label,
                 users.active, users.is_tech, users.portal_access, users.can_monitor_companies, users.password_reset_required
             FROM users
             LEFT JOIN companies ON companies.id = users.company_id
@@ -298,11 +342,15 @@ try {
 
     if ($action === 'bootstrap') {
         if (!empty($currentUser['password_reset_required'])) {
-            json_response(['currentUser' => public_user($currentUser), 'users' => [], 'tickets' => [], 'settings' => settings_payload($pdo)]);
+            json_response(['currentUser' => public_user($currentUser), 'users' => [], 'tickets' => [], 'settings' => settings_payload($pdo), 'portalMode' => portal_company_id_for_user($currentUser) !== null]);
         }
 
-        $users = users_payload($pdo);
-        $ticketRows = $pdo->query('SELECT * FROM tickets ORDER BY id DESC')->fetchAll();
+        $isPortalMode = portal_company_id_for_user($currentUser) !== null;
+        $users = $isPortalMode ? [public_user($currentUser)] : users_payload($pdo);
+        [$ticketWhere, $ticketParams] = ticket_scope_for_user($currentUser);
+        $ticketStmt = $pdo->prepare('SELECT * FROM tickets' . $ticketWhere . ' ORDER BY id DESC');
+        $ticketStmt->execute($ticketParams);
+        $ticketRows = $ticketStmt->fetchAll();
         $tickets = array_map('db_ticket_to_api', $ticketRows);
 
         if ($tickets) {
@@ -320,7 +368,7 @@ try {
             }
         }
 
-        json_response(['currentUser' => public_user($currentUser), 'users' => $users, 'tickets' => $tickets, 'settings' => settings_payload($pdo)]);
+        json_response(['currentUser' => public_user($currentUser), 'users' => $users, 'tickets' => $tickets, 'settings' => settings_payload($pdo), 'portalMode' => $isPortalMode]);
     }
 
     if ($action === 'save-settings') {
@@ -553,19 +601,26 @@ try {
             json_response(['error' => 'Ticket title is required'], 400);
         }
 
-        $assignee = trim((string) ($body['assignee'] ?? ''));
+        $portalCompanyId = portal_company_id_for_user($currentUser);
+        $isPortalMode = $portalCompanyId !== null;
+        $companyId = $isPortalMode
+            ? $portalCompanyId
+            : (isset($body['companyId']) && $body['companyId'] ? (int) $body['companyId'] : ((int) ($currentUser['company_id'] ?? 0) ?: default_company_id($pdo)));
+
+        $assignee = $isPortalMode ? '' : trim((string) ($body['assignee'] ?? ''));
         if ($assignee !== '' && !in_array($assignee, tech_names($pdo), true)) {
             json_response(['error' => 'Tickets can only be assigned to active technicians.'], 400);
         }
 
         $fields = [
+            'company_id' => $companyId,
             'type' => $body['type'] ?? 'Request',
             'title' => $title,
-            'status' => $body['status'] ?? 'New',
+            'status' => $isPortalMode ? 'New' : ($body['status'] ?? 'New'),
             'urgency' => $body['urgency'] ?? 'Low - Not Urgent',
             'request_time' => date('Y-m-d H:i:s', strtotime((string) ($body['requestTime'] ?? 'now'))),
-            'request_user' => $body['requestUser'] ?? 'Kelly Cox',
-            'priority' => $body['priority'] ?? 'P5-Low',
+            'request_user' => $isPortalMode ? (string) $currentUser['name'] : ($body['requestUser'] ?? 'Kelly Cox'),
+            'priority' => $isPortalMode ? 'P5-Low' : ($body['priority'] ?? 'P5-Low'),
             'assignee' => $assignee,
             'category' => $body['category'] ?? 'Application',
             'sub_category' => $body['subCategory'] ?? 'Ticket System',
@@ -579,11 +634,25 @@ try {
 
         $previousTicket = null;
         if ($id) {
-            $previousStmt = $pdo->prepare('SELECT status, priority FROM tickets WHERE id = ?');
+            if (!ticket_is_visible_to_user($pdo, $currentUser, $id)) {
+                json_response(['error' => 'Ticket not found'], 404);
+            }
+
+            $previousStmt = $pdo->prepare('SELECT status, priority, company_id, request_user, assignee FROM tickets WHERE id = ?');
             $previousStmt->execute([$id]);
             $previousTicket = $previousStmt->fetch();
+            if (!$previousTicket) {
+                json_response(['error' => 'Ticket not found'], 404);
+            }
+            if ($isPortalMode) {
+                $fields['company_id'] = (int) $previousTicket['company_id'];
+                $fields['status'] = (string) $previousTicket['status'];
+                $fields['priority'] = (string) $previousTicket['priority'];
+                $fields['request_user'] = (string) $previousTicket['request_user'];
+                $fields['assignee'] = (string) $previousTicket['assignee'];
+            }
 
-            $sql = 'UPDATE tickets SET type = :type, title = :title, status = :status, urgency = :urgency, request_time = :request_time, request_user = :request_user, priority = :priority, assignee = :assignee, category = :category, sub_category = :sub_category, third_category = :third_category, modify_user = :modify_user, description = :description, impact = :impact, asset = :asset, template = :template, updated_at = NOW() WHERE id = :id';
+            $sql = 'UPDATE tickets SET company_id = :company_id, type = :type, title = :title, status = :status, urgency = :urgency, request_time = :request_time, request_user = :request_user, priority = :priority, assignee = :assignee, category = :category, sub_category = :sub_category, third_category = :third_category, modify_user = :modify_user, description = :description, impact = :impact, asset = :asset, template = :template, updated_at = NOW() WHERE id = :id';
             $fields['id'] = $id;
             $pdo->prepare($sql)->execute($fields);
             $event = 'Ticket updated';
@@ -593,7 +662,7 @@ try {
                 $event = 'Priority changed to ' . $fields['priority'];
             }
         } else {
-            $sql = 'INSERT INTO tickets (type, title, status, urgency, request_time, request_user, priority, assignee, category, sub_category, third_category, modify_user, description, impact, asset, template) VALUES (:type, :title, :status, :urgency, :request_time, :request_user, :priority, :assignee, :category, :sub_category, :third_category, :modify_user, :description, :impact, :asset, :template)';
+            $sql = 'INSERT INTO tickets (company_id, type, title, status, urgency, request_time, request_user, priority, assignee, category, sub_category, third_category, modify_user, description, impact, asset, template) VALUES (:company_id, :type, :title, :status, :urgency, :request_time, :request_user, :priority, :assignee, :category, :sub_category, :third_category, :modify_user, :description, :impact, :asset, :template)';
             $pdo->prepare($sql)->execute($fields);
             $id = (int) $pdo->lastInsertId();
             $event = 'Service record opened';
@@ -723,7 +792,10 @@ try {
             json_response(['error' => 'A user message is required'], 400);
         }
 
-        $ticketRows = $pdo->query('SELECT id, type, title, status, urgency, request_user, priority, assignee, category, sub_category, description FROM tickets ORDER BY updated_at DESC, id DESC LIMIT 20')->fetchAll();
+        [$ticketWhere, $ticketParams] = ticket_scope_for_user($currentUser);
+        $ticketStmt = $pdo->prepare('SELECT id, type, title, status, urgency, request_user, priority, assignee, category, sub_category, description FROM tickets' . $ticketWhere . ' ORDER BY updated_at DESC, id DESC LIMIT 20');
+        $ticketStmt->execute($ticketParams);
+        $ticketRows = $ticketStmt->fetchAll();
         $ticketContext = array_map(static function (array $ticket) use ($truncate): array {
             return [
                 'id' => (int) $ticket['id'],

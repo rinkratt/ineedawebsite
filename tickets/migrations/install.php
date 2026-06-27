@@ -26,6 +26,7 @@ try {
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS tickets (
             id INT AUTO_INCREMENT PRIMARY KEY,
+            company_id INT NULL,
             type VARCHAR(40) NOT NULL DEFAULT 'Request',
             title VARCHAR(190) NOT NULL,
             status VARCHAR(60) NOT NULL DEFAULT 'New',
@@ -46,7 +47,8 @@ try {
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             INDEX idx_status (status),
             INDEX idx_type (type),
-            INDEX idx_assignee (assignee)
+            INDEX idx_assignee (assignee),
+            INDEX idx_ticket_company (company_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
 
@@ -97,9 +99,10 @@ try {
 
     $count = (int) $pdo->query('SELECT COUNT(*) FROM tickets')->fetchColumn();
     if ($count === 0) {
+        $defaultCompanyId = default_company_id($pdo);
         $ticketStmt = $pdo->prepare('
-            INSERT INTO tickets (type, title, status, urgency, request_time, request_user, priority, assignee, category, sub_category, third_category, modify_user, description, impact, asset, template)
-            VALUES (?, ?, ?, ?, DATE_SUB(NOW(), INTERVAL ? DAY), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO tickets (company_id, type, title, status, urgency, request_time, request_user, priority, assignee, category, sub_category, third_category, modify_user, description, impact, asset, template)
+            VALUES (?, ?, ?, ?, ?, DATE_SUB(NOW(), INTERVAL ? DAY), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ');
         $tickets = [
             ['Request', 'Add user directory and roles', 'New', 'Normal - Within a week', 0, 'Kelly Cox', 'P4-Normal', 'Kelly Cox', 'Application', 'Ticket System', 'Users', 'Kelly Cox', 'Create the first internal users: admin plus Tier 2 technicians.', 'Individual user', '', 'DEFAULT'],
@@ -110,7 +113,7 @@ try {
             ['Request', 'Create branded dashboard', 'In Progress', 'Normal - Within a week', 5, 'Kelly Cox', 'P4-Normal', 'Larsen Vallecillo', 'Interface', 'Dashboard', 'Branding', 'Larsen Vallecillo', 'Keep the original friendly dashboard style while showing the dense service-record table from the Tickets nav item.', 'Individual user', '', 'DEFAULT'],
         ];
         foreach ($tickets as $ticket) {
-            $ticketStmt->execute($ticket);
+            $ticketStmt->execute(array_merge([$defaultCompanyId], $ticket));
             $ticketId = (int) $pdo->lastInsertId();
             $activity = $pdo->prepare('INSERT INTO ticket_activity (ticket_id, actor, event) VALUES (?, ?, ?)');
             $activity->execute([$ticketId, $ticket[11], 'Service record opened']);

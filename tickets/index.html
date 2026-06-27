@@ -6,7 +6,7 @@
     <title>Ticket System</title>
     <link rel="icon" href="/favicon.ico?v=ineedawebsite-20260621" type="image/x-icon" sizes="any" />
     <link rel="shortcut icon" href="/favicon.ico?v=ineedawebsite-20260621" type="image/x-icon" />
-    <link rel="stylesheet" href="styles.css?v=20260627-user-companies" />
+    <link rel="stylesheet" href="styles.css?v=20260627-portal-layout" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -24,8 +24,9 @@
 
         <form class="login-form" id="loginForm">
           <div>
-            <h2>Sign in</h2>
-            <p>Use your team account to open the help desk.</p>
+            <h2 id="loginTitle">Sign in</h2>
+            <p id="loginIntro">Use your team account to open the help desk.</p>
+            <p class="login-portal-hint" id="loginPortalHint" hidden></p>
           </div>
           <label>
             Email
@@ -614,7 +615,8 @@
                       </label>
                       <label>
                         Workspace Name
-                        <input id="companyWorkspaceLabel" maxlength="80" placeholder="Workspace" />
+                        <input id="companyWorkspaceLabel" maxlength="63" pattern="[a-z0-9-]+" placeholder="weneedhelp" title="Use lowercase letters, numbers, and dashes only" autocomplete="off" spellcheck="false" />
+                        <small class="field-hint" id="companyPortalUrl">https://workspace.weneedhelp.us</small>
                       </label>
                       <label>
                         Ticket System Name
@@ -786,6 +788,83 @@
       </main>
     </div>
 
+    <div class="portal-shell" id="portalShell" hidden>
+      <header class="portal-header">
+        <div class="brand">
+          <div class="brand-logo" aria-hidden="true">
+            <img data-brand-logo src="/logo.png" alt="" />
+            <span>TS</span>
+          </div>
+          <div>
+            <p class="eyebrow" data-brand-workspace>Workspace</p>
+            <h1 data-brand-title>Ticket System</h1>
+          </div>
+        </div>
+        <div class="portal-account">
+          <button class="theme-toggle" id="portalThemeToggleButton" type="button" aria-label="Switch theme">
+            <svg class="theme-sun" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v3" />
+              <path d="M12 19v3" />
+              <path d="M4.2 4.2l2.1 2.1" />
+              <path d="M17.7 17.7l2.1 2.1" />
+              <path d="M2 12h3" />
+              <path d="M19 12h3" />
+              <path d="M4.2 19.8l2.1-2.1" />
+              <path d="M17.7 6.3l2.1-2.1" />
+            </svg>
+            <svg class="theme-moon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M21 14.8A8 8 0 0 1 9.2 3a6.5 6.5 0 1 0 11.8 11.8z" />
+            </svg>
+          </button>
+          <div>
+            <strong id="portalUserName">Signed in</strong>
+            <small id="portalUserRole">Portal user</small>
+          </div>
+          <button class="secondary-button" id="portalLogoutButton" type="button">Log Out</button>
+        </div>
+      </header>
+
+      <main class="portal-main">
+        <section class="portal-hero">
+          <div>
+            <p class="eyebrow">Customer Portal</p>
+            <h2>How can we help?</h2>
+            <p>Open a new request or check the status of your existing tickets.</p>
+          </div>
+          <button class="primary-button" id="portalNewTicketButton" type="button">
+            <span aria-hidden="true">+</span>
+            New Request
+          </button>
+        </section>
+
+        <section class="metrics-grid portal-metrics" aria-label="Portal ticket summary">
+          <article class="metric">
+            <span>Open requests</span>
+            <strong id="portalOpenCount">0</strong>
+          </article>
+          <article class="metric">
+            <span>Completed</span>
+            <strong id="portalDoneCount">0</strong>
+          </article>
+          <article class="metric">
+            <span>Portal URL</span>
+            <strong id="portalUrlLabel">workspace</strong>
+          </article>
+        </section>
+
+        <section class="panel portal-ticket-panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Requests</p>
+              <h3>My Tickets</h3>
+            </div>
+          </div>
+          <div class="portal-ticket-list" id="portalTicketList"></div>
+        </section>
+      </main>
+    </div>
+
     <aside class="compose-panel" id="composePanel" hidden aria-label="Create or edit ticket">
       <form id="ticketForm">
         <div class="compose-top">
@@ -814,7 +893,7 @@
         <input class="title-input" id="titleInput" required placeholder="DEFAULT" />
 
         <div class="compose-strip">
-          <label>
+          <label class="tech-only-field">
             Priority
             <select id="priorityInput">
               <option>P1-Highest</option>
@@ -833,13 +912,13 @@
               <option>Access</option>
             </select>
           </label>
-          <label>
+          <label class="tech-only-field">
             Assignee
             <select id="assigneeInput">
               <option value="">Unassigned</option>
             </select>
           </label>
-          <label>
+          <label class="tech-only-field">
             Status
             <select id="statusInput">
               <option>New</option>
@@ -883,7 +962,7 @@
             </label>
           </div>
           <div class="form-grid">
-            <label>
+            <label class="tech-only-field">
               Request user *
               <input id="requestUserInput" required placeholder="Select" />
             </label>
@@ -905,6 +984,6 @@
     </aside>
 
     <script src="categories.js?v=20260626"></script>
-    <script src="app.js?v=20260627-user-companies"></script>
+    <script src="app.js?v=20260627-portal-layout"></script>
   </body>
 </html>
