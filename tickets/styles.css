@@ -230,6 +230,18 @@ button {
   color: var(--muted);
 }
 
+.site-switch-button {
+  text-decoration: none;
+}
+
+.site-switch-button[hidden] {
+  display: none;
+}
+
+.account-panel .site-switch-button {
+  width: 100%;
+}
+
 .portal-main {
   display: grid;
   width: min(1120px, 100%);

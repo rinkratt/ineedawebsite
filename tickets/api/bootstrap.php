@@ -4,10 +4,12 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 
 $secureCookie = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+$cookieDomain = session_cookie_domain();
 session_name('ticket_system_session');
 session_set_cookie_params([
     'lifetime' => 0,
     'path' => '/',
+    'domain' => $cookieDomain,
     'secure' => $secureCookie,
     'httponly' => true,
     'samesite' => 'Lax',
@@ -154,6 +156,53 @@ function normalize_workspace_label(mixed $value, string $fallback = 'workspace')
     $text = trim($text, '-');
 
     return $text !== '' ? $text : $fallback;
+}
+
+function portal_root_domain(): string
+{
+    $config = tickets_config();
+    $domain = strtolower(trim((string) ($config['portal_root_domain'] ?? 'weneedhelp.us')));
+    $domain = preg_replace('/[^a-z0-9.-]/', '', $domain) ?? 'weneedhelp.us';
+    return trim($domain, '.') ?: 'weneedhelp.us';
+}
+
+function request_host_name(): string
+{
+    $host = strtolower((string) ($_SERVER['HTTP_HOST'] ?? ''));
+    $host = preg_replace('/:\d+$/', '', $host) ?? '';
+    $host = preg_replace('/[^a-z0-9.-]/', '', $host) ?? '';
+    return trim($host, '.');
+}
+
+function session_cookie_domain(): string
+{
+    $host = request_host_name();
+    $root = portal_root_domain();
+    if ($host === $root || str_ends_with($host, '.' . $root)) {
+        return '.' . $root;
+    }
+    return '';
+}
+
+function request_portal_slug(): string
+{
+    $querySlug = normalize_workspace_label($_GET['portal'] ?? '', '');
+    if ($querySlug !== '') {
+        return $querySlug;
+    }
+
+    $host = request_host_name();
+    $root = portal_root_domain();
+    $suffix = '.' . $root;
+    if ($host === $root || !str_ends_with($host, $suffix)) {
+        return '';
+    }
+
+    $subdomain = substr($host, 0, -strlen($suffix));
+    $parts = array_values(array_filter(explode('.', $subdomain), static fn (string $part): bool => $part !== ''));
+    $label = $parts ? (string) end($parts) : '';
+    $slug = normalize_workspace_label($label, '');
+    return $slug === 'www' ? '' : $slug;
 }
 
 function ensure_password_reset_schema(PDO $pdo): void
@@ -550,13 +599,20 @@ function user_uses_portal_layout(array $user): bool
     return empty($user['is_tech']) && $role === 'end user';
 }
 
-function portal_company_id_for_user(array $user): ?int
+function portal_company_id_for_user(PDO $pdo, array $user): ?int
 {
-    $sessionCompanyId = isset($_SESSION['ticket_portal_company_id']) ? (int) $_SESSION['ticket_portal_company_id'] : 0;
-    if ($sessionCompanyId > 0 && user_can_access_portal_company($user, $sessionCompanyId)) {
-        return $sessionCompanyId;
+    $portalSlug = request_portal_slug();
+    if ($portalSlug !== '') {
+        $company = company_by_workspace_label($pdo, $portalSlug);
+        if ($company && user_can_access_portal_company($user, (int) $company['id'])) {
+            $_SESSION['ticket_portal_company_id'] = (int) $company['id'];
+            $_SESSION['ticket_portal_slug'] = (string) $company['workspace_label'];
+            return (int) $company['id'];
+        }
+        return null;
     }
 
+    unset($_SESSION['ticket_portal_company_id'], $_SESSION['ticket_portal_slug']);
     if (user_uses_portal_layout($user) && !empty($user['company_id'])) {
         return (int) $user['company_id'];
     }
@@ -645,6 +701,22 @@ function require_login(PDO $pdo): array
     return $user;
 }
 
+function delete_host_only_session_cookie(): void
+{
+    if (session_cookie_domain() === '') {
+        return;
+    }
+
+    $params = session_get_cookie_params();
+    setcookie(session_name(), '', [
+        'expires' => time() - 42000,
+        'path' => $params['path'] ?: '/',
+        'secure' => (bool) $params['secure'],
+        'httponly' => (bool) $params['httponly'],
+        'samesite' => $params['samesite'] ?? 'Lax',
+    ]);
+}
+
 function destroy_session_cookie(): void
 {
     if (session_status() !== PHP_SESSION_ACTIVE) {
@@ -661,6 +733,7 @@ function destroy_session_cookie(): void
         'httponly' => (bool) $params['httponly'],
         'samesite' => $params['samesite'] ?? 'Lax',
     ]);
+    delete_host_only_session_cookie();
     session_destroy();
 }
 

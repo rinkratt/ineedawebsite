@@ -130,9 +130,9 @@ function normalize_company_payload(array $body): array
     ];
 }
 
-function ticket_scope_for_user(array $user): array
+function ticket_scope_for_user(PDO $pdo, array $user): array
 {
-    $portalCompanyId = portal_company_id_for_user($user);
+    $portalCompanyId = portal_company_id_for_user($pdo, $user);
     if (!$portalCompanyId) {
         return ['', []];
     }
@@ -146,7 +146,7 @@ function ticket_scope_for_user(array $user): array
 
 function ticket_is_visible_to_user(PDO $pdo, array $user, int $ticketId): bool
 {
-    [$where, $params] = ticket_scope_for_user($user);
+    [$where, $params] = ticket_scope_for_user($pdo, $user);
     $stmt = $pdo->prepare('SELECT id FROM tickets' . ($where ? $where . ' AND id = ?' : ' WHERE id = ?') . ' LIMIT 1');
     $stmt->execute([...$params, $ticketId]);
     return (bool) $stmt->fetch();
@@ -195,6 +195,7 @@ try {
         }
 
         session_regenerate_id(true);
+        delete_host_only_session_cookie();
         $_SESSION['ticket_user_id'] = (int) $user['id'];
         if ($portalCompany) {
             $_SESSION['ticket_portal_company_id'] = (int) $portalCompany['id'];
@@ -342,12 +343,12 @@ try {
 
     if ($action === 'bootstrap') {
         if (!empty($currentUser['password_reset_required'])) {
-            json_response(['currentUser' => public_user($currentUser), 'users' => [], 'tickets' => [], 'settings' => settings_payload($pdo), 'portalMode' => portal_company_id_for_user($currentUser) !== null]);
+            json_response(['currentUser' => public_user($currentUser), 'users' => [], 'tickets' => [], 'settings' => settings_payload($pdo), 'portalMode' => portal_company_id_for_user($pdo, $currentUser) !== null]);
         }
 
-        $isPortalMode = portal_company_id_for_user($currentUser) !== null;
+        $isPortalMode = portal_company_id_for_user($pdo, $currentUser) !== null;
         $users = $isPortalMode ? [public_user($currentUser)] : users_payload($pdo);
-        [$ticketWhere, $ticketParams] = ticket_scope_for_user($currentUser);
+        [$ticketWhere, $ticketParams] = ticket_scope_for_user($pdo, $currentUser);
         $ticketStmt = $pdo->prepare('SELECT * FROM tickets' . $ticketWhere . ' ORDER BY id DESC');
         $ticketStmt->execute($ticketParams);
         $ticketRows = $ticketStmt->fetchAll();
@@ -601,7 +602,7 @@ try {
             json_response(['error' => 'Ticket title is required'], 400);
         }
 
-        $portalCompanyId = portal_company_id_for_user($currentUser);
+        $portalCompanyId = portal_company_id_for_user($pdo, $currentUser);
         $isPortalMode = $portalCompanyId !== null;
         $companyId = $isPortalMode
             ? $portalCompanyId
@@ -792,7 +793,7 @@ try {
             json_response(['error' => 'A user message is required'], 400);
         }
 
-        [$ticketWhere, $ticketParams] = ticket_scope_for_user($currentUser);
+        [$ticketWhere, $ticketParams] = ticket_scope_for_user($pdo, $currentUser);
         $ticketStmt = $pdo->prepare('SELECT id, type, title, status, urgency, request_user, priority, assignee, category, sub_category, description FROM tickets' . $ticketWhere . ' ORDER BY updated_at DESC, id DESC LIMIT 20');
         $ticketStmt->execute($ticketParams);
         $ticketRows = $ticketStmt->fetchAll();

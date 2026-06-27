@@ -6,7 +6,7 @@
     <title>Ticket System</title>
     <link rel="icon" href="/favicon.ico?v=ineedawebsite-20260621" type="image/x-icon" sizes="any" />
     <link rel="shortcut icon" href="/favicon.ico?v=ineedawebsite-20260621" type="image/x-icon" />
-    <link rel="stylesheet" href="styles.css?v=20260627-portal-layout" />
+    <link rel="stylesheet" href="styles.css?v=20260627-site-switch" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -230,6 +230,7 @@
             </span>
             <small id="currentUserRole"></small>
           </div>
+          <a class="secondary-button site-switch-button" id="openUserPortalButton" href="https://weneedhelp.weneedhelp.us">User Portal</a>
           <button class="secondary-button" id="logoutButton" type="button">Log Out</button>
         </div>
       </aside>
@@ -821,6 +822,7 @@
             <strong id="portalUserName">Signed in</strong>
             <small id="portalUserRole">Portal user</small>
           </div>
+          <a class="secondary-button site-switch-button" id="openTicketPortalButton" href="https://weneedhelp.us">Ticket Portal</a>
           <button class="secondary-button" id="portalLogoutButton" type="button">Log Out</button>
         </div>
       </header>
@@ -984,6 +986,6 @@
     </aside>
 
     <script src="categories.js?v=20260626"></script>
-    <script src="app.js?v=20260627-portal-layout"></script>
+    <script src="app.js?v=20260627-site-switch"></script>
   </body>
 </html>

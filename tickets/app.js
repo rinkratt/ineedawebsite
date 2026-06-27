@@ -107,10 +107,12 @@ const els = {
   passwordChangeError: document.querySelector("#passwordChangeError"),
   currentUserName: document.querySelector("#currentUserName"),
   currentUserRole: document.querySelector("#currentUserRole"),
+  openUserPortal: document.querySelector("#openUserPortalButton"),
   portalShell: document.querySelector("#portalShell"),
   portalThemeToggle: document.querySelector("#portalThemeToggleButton"),
   portalUserName: document.querySelector("#portalUserName"),
   portalUserRole: document.querySelector("#portalUserRole"),
+  openTicketPortal: document.querySelector("#openTicketPortalButton"),
   portalLogoutButton: document.querySelector("#portalLogoutButton"),
   portalNewTicket: document.querySelector("#portalNewTicketButton"),
   portalOpenCount: document.querySelector("#portalOpenCount"),
@@ -400,7 +402,8 @@ async function loadPublicBranding() {
 }
 
 async function apiRequest(query = "", options = {}) {
-  const separator = query ? `?${query}` : "";
+  const nextQuery = queryWithPortalContext(query);
+  const separator = nextQuery ? `?${nextQuery}` : "";
   const response = await fetch(`${API_URL}${separator}`, {
     headers: { "Content-Type": "application/json" },
     ...options,
@@ -417,6 +420,14 @@ async function apiRequest(query = "", options = {}) {
     throw error;
   }
   return payload;
+}
+
+function queryWithPortalContext(query = "") {
+  const params = new URLSearchParams(query);
+  if (portalContext.slug && !params.has("portal")) {
+    params.set("portal", portalContext.slug);
+  }
+  return params.toString();
 }
 
 function hideLoginForms() {
@@ -644,6 +655,7 @@ function showApp() {
   if (portalExperience) {
     els.portalUserName.textContent = currentUser?.name || "Signed in";
     els.portalUserRole.textContent = currentUser?.companyName || currentUser?.role || "Portal user";
+    updateSiteSwitchers();
     renderPortal();
     return;
   }
@@ -652,6 +664,7 @@ function showApp() {
   if (!isAdmin() && activeView === "settings") activeView = "dashboard";
   els.currentUserName.textContent = currentUser?.name || "Signed in";
   els.currentUserRole.textContent = currentUser?.role || "";
+  updateSiteSwitchers();
 }
 
 function normalizeTheme(value) {
@@ -729,6 +742,21 @@ function detectPortalContext() {
 
 function portalUrlForWorkspace(workspaceName = branding.workspaceLabel) {
   return `https://${normalizeWorkspaceName(workspaceName)}.${portalRootDomain}`;
+}
+
+function ticketPortalUrl() {
+  return `https://${portalRootDomain}`;
+}
+
+function userPortalUrl() {
+  return portalUrlForWorkspace(currentUser?.companyWorkspace || branding.workspaceLabel);
+}
+
+function updateSiteSwitchers() {
+  els.openUserPortal.href = userPortalUrl();
+  els.openUserPortal.hidden = !currentUser?.portalAccess;
+  els.openTicketPortal.href = ticketPortalUrl();
+  els.openTicketPortal.hidden = !(currentUser?.isTech || isAdmin());
 }
 
 function keepCompanyWorkspaceNameDnsSafe() {
