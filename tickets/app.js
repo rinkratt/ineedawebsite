@@ -31,6 +31,7 @@ let activeTicketId = null;
 let activeDetailTab = "details";
 let activeView = "dashboard";
 let currentUser = null;
+const initialResetToken = new URLSearchParams(window.location.search).get("reset") || "";
 let categorySettingsSearch = "";
 const aiAssists = new Map();
 let aiChatBusy = false;
@@ -45,6 +46,17 @@ const els = {
   loginEmail: document.querySelector("#loginEmail"),
   loginPassword: document.querySelector("#loginPassword"),
   loginError: document.querySelector("#loginError"),
+  forgotPassword: document.querySelector("#forgotPasswordButton"),
+  passwordResetRequestForm: document.querySelector("#passwordResetRequestForm"),
+  resetEmailInput: document.querySelector("#resetEmailInput"),
+  resetRequestMessage: document.querySelector("#resetRequestMessage"),
+  backToLoginFromResetRequest: document.querySelector("#backToLoginFromResetRequest"),
+  passwordResetForm: document.querySelector("#passwordResetForm"),
+  resetPasswordToken: document.querySelector("#resetPasswordToken"),
+  resetPasswordInput: document.querySelector("#resetPasswordInput"),
+  resetPasswordConfirmInput: document.querySelector("#resetPasswordConfirmInput"),
+  resetPasswordMessage: document.querySelector("#resetPasswordMessage"),
+  backToLoginFromResetPassword: document.querySelector("#backToLoginFromResetPassword"),
   passwordChangeForm: document.querySelector("#passwordChangeForm"),
   currentPasswordInput: document.querySelector("#currentPasswordInput"),
   newPasswordInput: document.querySelector("#newPasswordInput"),
@@ -144,6 +156,11 @@ const els = {
 };
 
 els.loginForm.addEventListener("submit", login);
+els.forgotPassword.addEventListener("click", showPasswordResetRequest);
+els.passwordResetRequestForm.addEventListener("submit", requestPasswordReset);
+els.backToLoginFromResetRequest.addEventListener("click", () => showLogin());
+els.passwordResetForm.addEventListener("submit", resetPassword);
+els.backToLoginFromResetPassword.addEventListener("click", () => showLogin());
 els.passwordChangeForm.addEventListener("submit", changePassword);
 els.logoutButton.addEventListener("click", logout);
 els.newTicket.addEventListener("click", () => openCompose());
@@ -192,6 +209,10 @@ els.detailStatus.addEventListener("change", () => updateDetailField("status", el
 els.exportButton.addEventListener("click", exportTickets);
 els.importInput.addEventListener("change", importTickets);
 
+document.querySelectorAll("[data-password-toggle]").forEach((button) => {
+  button.addEventListener("click", togglePasswordVisibility);
+});
+
 [els.assigneeFilterButton, els.statusFilterButton, els.priorityFilterButton].forEach((button) => {
   button.addEventListener("click", () => {
     els.filterPanel.hidden = !els.filterPanel.hidden;
@@ -205,7 +226,11 @@ document.querySelectorAll(".tab").forEach((tab) => {
   });
 });
 
-loadApp();
+if (initialResetToken) {
+  showPasswordReset(initialResetToken);
+} else {
+  loadApp();
+}
 
 async function loadApp() {
   try {
@@ -250,9 +275,42 @@ async function apiRequest(query = "", options = {}) {
   return payload;
 }
 
+function hideLoginForms() {
+  els.loginForm.hidden = true;
+  els.passwordResetRequestForm.hidden = true;
+  els.passwordResetForm.hidden = true;
+  els.passwordChangeForm.hidden = true;
+}
+
+function setFormMessage(element, message = "", isError = false) {
+  element.textContent = message;
+  element.classList.toggle("error", isError);
+}
+
+function setPasswordVisibility(input, button, visible) {
+  input.type = visible ? "text" : "password";
+  button.setAttribute("aria-pressed", visible ? "true" : "false");
+  button.setAttribute("aria-label", visible ? "Hide password" : "Show password");
+}
+
+function resetPasswordVisibility() {
+  document.querySelectorAll("[data-password-toggle]").forEach((button) => {
+    const input = document.getElementById(button.dataset.passwordTarget);
+    if (input) setPasswordVisibility(input, button, false);
+  });
+}
+
+function togglePasswordVisibility(event) {
+  const button = event.currentTarget;
+  const input = document.getElementById(button.dataset.passwordTarget);
+  if (!input) return;
+  setPasswordVisibility(input, button, input.type === "password");
+}
+
 async function login(event) {
   event.preventDefault();
   els.loginError.textContent = "";
+  els.loginError.classList.remove("success-message");
 
   try {
     const result = await apiRequest("action=login", {
@@ -271,6 +329,84 @@ async function login(event) {
     await loadApp();
   } catch (error) {
     els.loginError.textContent = error.message || "Sign in failed.";
+  }
+}
+
+function showPasswordResetRequest() {
+  els.appShell.hidden = true;
+  els.loginScreen.hidden = false;
+  hideLoginForms();
+  els.passwordResetRequestForm.hidden = false;
+  els.resetEmailInput.value = els.loginEmail.value.trim();
+  setFormMessage(els.resetRequestMessage);
+  els.resetEmailInput.focus();
+}
+
+function showPasswordReset(token) {
+  els.appShell.hidden = true;
+  els.loginScreen.hidden = false;
+  hideLoginForms();
+  els.passwordResetForm.hidden = false;
+  els.passwordResetForm.reset();
+  els.resetPasswordToken.value = token;
+  setFormMessage(els.resetPasswordMessage);
+  resetPasswordVisibility();
+  els.resetPasswordInput.focus();
+}
+
+async function requestPasswordReset(event) {
+  event.preventDefault();
+  const submitButton = event.submitter;
+  if (submitButton) submitButton.disabled = true;
+  setFormMessage(els.resetRequestMessage, "Sending reset link...");
+
+  try {
+    const result = await apiRequest("action=request-password-reset", {
+      method: "POST",
+      body: JSON.stringify({ email: els.resetEmailInput.value.trim() }),
+    });
+    setFormMessage(els.resetRequestMessage, result.message || "If that email belongs to an active account, a password reset link has been sent.");
+  } catch (error) {
+    setFormMessage(els.resetRequestMessage, error.message || "Password reset could not be requested.", true);
+  } finally {
+    if (submitButton) submitButton.disabled = false;
+  }
+}
+
+async function resetPassword(event) {
+  event.preventDefault();
+  const nextPassword = els.resetPasswordInput.value;
+  const confirmPassword = els.resetPasswordConfirmInput.value;
+
+  if (nextPassword.length < 10) {
+    setFormMessage(els.resetPasswordMessage, "Use at least 10 characters.", true);
+    return;
+  }
+  if (nextPassword !== confirmPassword) {
+    setFormMessage(els.resetPasswordMessage, "The new passwords do not match.", true);
+    return;
+  }
+
+  const submitButton = event.submitter;
+  if (submitButton) submitButton.disabled = true;
+  setFormMessage(els.resetPasswordMessage, "Resetting password...");
+
+  try {
+    const result = await apiRequest("action=reset-password", {
+      method: "POST",
+      body: JSON.stringify({
+        token: els.resetPasswordToken.value,
+        newPassword: nextPassword,
+      }),
+    });
+    window.history.replaceState(null, "", window.location.pathname);
+    els.passwordResetForm.reset();
+    resetPasswordVisibility();
+    showLogin(result.message || "Your password has been reset. Sign in with the new password.", false);
+  } catch (error) {
+    setFormMessage(els.resetPasswordMessage, error.message || "Password could not be reset.", true);
+  } finally {
+    if (submitButton) submitButton.disabled = false;
   }
 }
 
@@ -316,20 +452,24 @@ async function logout() {
   showLogin();
 }
 
-function showLogin(message = "") {
+function showLogin(message = "", isError = true) {
   els.appShell.hidden = true;
   els.loginScreen.hidden = false;
+  hideLoginForms();
   els.loginForm.hidden = false;
-  els.passwordChangeForm.hidden = true;
   els.loginError.textContent = message;
+  els.loginError.classList.toggle("success-message", !isError && message !== "");
+  setFormMessage(els.resetRequestMessage);
+  setFormMessage(els.resetPasswordMessage);
   els.loginPassword.value = "";
+  resetPasswordVisibility();
   els.loginEmail.focus();
 }
 
 function showPasswordChange(message = "") {
   els.appShell.hidden = true;
   els.loginScreen.hidden = false;
-  els.loginForm.hidden = true;
+  hideLoginForms();
   els.passwordChangeForm.hidden = false;
   els.passwordChangeError.textContent = message;
   els.currentPasswordInput.focus();

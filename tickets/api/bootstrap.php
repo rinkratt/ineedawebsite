@@ -93,6 +93,23 @@ function users_table_has_column(PDO $pdo, string $column): bool
     return table_has_column($pdo, 'users', $column);
 }
 
+function ensure_password_reset_schema(PDO $pdo): void
+{
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS password_resets (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            email VARCHAR(190) NOT NULL,
+            token_hash CHAR(64) NOT NULL,
+            expires_at DATETIME NOT NULL,
+            used_at DATETIME NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_password_reset_token (token_hash),
+            INDEX idx_password_reset_user (user_id, expires_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+}
+
 function ensure_auth_schema(PDO $pdo): void
 {
     static $checked = false;
@@ -115,6 +132,7 @@ function ensure_auth_schema(PDO $pdo): void
     if (!users_table_has_column($pdo, 'is_tech')) {
         $pdo->exec('ALTER TABLE users ADD COLUMN is_tech TINYINT(1) NOT NULL DEFAULT 1');
     }
+    ensure_password_reset_schema($pdo);
 
     $checked = true;
 }
@@ -382,6 +400,55 @@ function tech_names(PDO $pdo): array
 {
     $rows = $pdo->query('SELECT name FROM users WHERE active = 1 AND is_tech = 1 ORDER BY name')->fetchAll();
     return array_map(static fn (array $row): string => (string) $row['name'], $rows);
+}
+
+function current_origin(): string
+{
+    $host = (string) ($_SERVER['HTTP_HOST'] ?? 'weneedhelp.us');
+    if (!preg_match('/^[A-Za-z0-9.-]+(?::[0-9]+)?$/', $host)) {
+        $host = 'weneedhelp.us';
+    }
+
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    return $scheme . '://' . $host;
+}
+
+function app_base_url(): string
+{
+    $scriptName = (string) ($_SERVER['SCRIPT_NAME'] ?? '/api/index.php');
+    $basePath = rtrim(str_replace('\\', '/', dirname(dirname($scriptName))), '/');
+    return current_origin() . ($basePath === '' ? '' : $basePath);
+}
+
+function password_reset_from_email(): string
+{
+    $host = (string) ($_SERVER['HTTP_HOST'] ?? 'weneedhelp.us');
+    $host = preg_replace('/:\d+$/', '', $host) ?? 'weneedhelp.us';
+    $host = preg_replace('/[^A-Za-z0-9.-]/', '', $host) ?? 'weneedhelp.us';
+    $host = preg_replace('/^www\./i', '', $host) ?? $host;
+    if ($host === '') {
+        $host = 'weneedhelp.us';
+    }
+    return 'no-reply@' . $host;
+}
+
+function send_password_reset_email(array $user, string $resetLink): bool
+{
+    if (!function_exists('mail')) {
+        return false;
+    }
+
+    $subject = 'Ticket System password reset';
+    $body = "A password reset was requested for your Ticket System account.\n\n"
+        . "Use this link within 60 minutes to set a new password:\n"
+        . $resetLink . "\n\n"
+        . "If you did not request this, you can ignore this message.";
+    $headers = [
+        'From: Ticket System <' . password_reset_from_email() . '>',
+        'Content-Type: text/plain; charset=UTF-8',
+    ];
+
+    return mail((string) $user['email'], $subject, $body, implode("\r\n", $headers));
 }
 
 function openai_api_key(): string

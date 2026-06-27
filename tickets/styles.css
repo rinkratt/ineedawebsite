@@ -83,10 +83,80 @@ button {
   background: var(--panel);
 }
 
+.password-control {
+  position: relative;
+  display: block;
+}
+
+.password-control input {
+  width: 100%;
+  padding-right: 46px;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  display: grid;
+  width: 42px;
+  height: calc(100% - 2px);
+  min-height: 42px;
+  place-items: center;
+  border: 0;
+  border-left: 1px solid var(--line);
+  border-radius: 0 6px 6px 0;
+  color: var(--muted);
+  background: transparent;
+}
+
+.password-toggle:hover,
+.password-toggle:focus-visible {
+  color: var(--red);
+}
+
+.password-toggle svg {
+  grid-area: 1 / 1;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.password-toggle .eye-closed,
+.password-toggle[aria-pressed="true"] .eye-open {
+  display: none;
+}
+
+.password-toggle[aria-pressed="true"] .eye-closed {
+  display: block;
+}
+
 .form-error {
   min-height: 20px;
   color: var(--red-dark);
   font-weight: 900;
+}
+
+.form-message {
+  min-height: 20px;
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.form-message.error {
+  color: var(--red-dark);
+}
+
+.form-error.success-message {
+  color: #15803d;
+}
+
+.login-link {
+  justify-self: center;
+  padding: 2px 0;
 }
 
 .app-shell {

@@ -6,7 +6,7 @@
     <title>Ticket System</title>
     <link rel="icon" href="/favicon.ico?v=ineedawebsite-20260621" type="image/x-icon" sizes="any" />
     <link rel="shortcut icon" href="/favicon.ico?v=ineedawebsite-20260621" type="image/x-icon" />
-    <link rel="stylesheet" href="styles.css?v=20260626-icons" />
+    <link rel="stylesheet" href="styles.css?v=20260626-password-reset" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -30,10 +30,86 @@
           </label>
           <label>
             Password
-            <input id="loginPassword" type="password" autocomplete="current-password" required />
+            <span class="password-control">
+              <input id="loginPassword" type="password" autocomplete="current-password" required />
+              <button class="password-toggle" id="toggleLoginPassword" type="button" data-password-toggle data-password-target="loginPassword" aria-label="Show password" aria-pressed="false">
+                <svg class="eye-open" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+                <svg class="eye-closed" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M2 12s3.5-6 10-6c2.4 0 4.4.8 6 2" />
+                  <path d="M22 12s-3.5 6-10 6c-2.4 0-4.4-.8-6-2" />
+                  <path d="M9.9 9.9a3 3 0 0 1 4.2 4.2" />
+                  <path d="M3 3l18 18" />
+                </svg>
+              </button>
+            </span>
           </label>
           <p class="form-error" id="loginError" role="alert"></p>
           <button class="primary-button" type="submit">Sign In</button>
+          <button class="link-button login-link" id="forgotPasswordButton" type="button">Reset password</button>
+        </form>
+
+        <form class="login-form" id="passwordResetRequestForm" hidden>
+          <div>
+            <h2>Reset password</h2>
+            <p>Enter your account email and we will send a reset link.</p>
+          </div>
+          <label>
+            Email
+            <input id="resetEmailInput" type="email" autocomplete="username" required />
+          </label>
+          <p class="form-message" id="resetRequestMessage" role="status"></p>
+          <button class="primary-button" type="submit">Send Reset Link</button>
+          <button class="link-button login-link" id="backToLoginFromResetRequest" type="button">Back to Sign In</button>
+        </form>
+
+        <form class="login-form" id="passwordResetForm" hidden>
+          <div>
+            <h2>Set new password</h2>
+            <p>Use at least 10 characters for your new password.</p>
+          </div>
+          <input id="resetPasswordToken" type="hidden" />
+          <label>
+            New password
+            <span class="password-control">
+              <input id="resetPasswordInput" type="password" autocomplete="new-password" minlength="10" required />
+              <button class="password-toggle" type="button" data-password-toggle data-password-target="resetPasswordInput" aria-label="Show password" aria-pressed="false">
+                <svg class="eye-open" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+                <svg class="eye-closed" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M2 12s3.5-6 10-6c2.4 0 4.4.8 6 2" />
+                  <path d="M22 12s-3.5 6-10 6c-2.4 0-4.4-.8-6-2" />
+                  <path d="M9.9 9.9a3 3 0 0 1 4.2 4.2" />
+                  <path d="M3 3l18 18" />
+                </svg>
+              </button>
+            </span>
+          </label>
+          <label>
+            Confirm new password
+            <span class="password-control">
+              <input id="resetPasswordConfirmInput" type="password" autocomplete="new-password" minlength="10" required />
+              <button class="password-toggle" type="button" data-password-toggle data-password-target="resetPasswordConfirmInput" aria-label="Show password" aria-pressed="false">
+                <svg class="eye-open" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+                <svg class="eye-closed" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M2 12s3.5-6 10-6c2.4 0 4.4.8 6 2" />
+                  <path d="M22 12s-3.5 6-10 6c-2.4 0-4.4-.8-6-2" />
+                  <path d="M9.9 9.9a3 3 0 0 1 4.2 4.2" />
+                  <path d="M3 3l18 18" />
+                </svg>
+              </button>
+            </span>
+          </label>
+          <p class="form-message" id="resetPasswordMessage" role="status"></p>
+          <button class="primary-button" type="submit">Reset Password</button>
+          <button class="link-button login-link" id="backToLoginFromResetPassword" type="button">Back to Sign In</button>
         </form>
 
         <form class="login-form" id="passwordChangeForm" hidden>
@@ -95,12 +171,8 @@
           <button class="nav-item" id="settingsNav" type="button" data-view="settings">
             <span class="nav-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" focusable="false">
-                <path d="M4 7h16" />
-                <path d="M4 12h16" />
-                <path d="M4 17h16" />
-                <circle cx="9" cy="7" r="2" />
-                <circle cx="15" cy="12" r="2" />
-                <circle cx="11" cy="17" r="2" />
+                <path d="M12 2.5l1.6 2.7 3.1.7.3 3.2 2.4 2-2.4 2 .3 3.2-3.1.7-1.6 2.7-2.2-2.3-3.1-.7-.3-3.2-2.4-2 2.4-2-.3-3.2 3.1-.7L12 2.5z" />
+                <circle cx="12" cy="12" r="3.2" />
               </svg>
             </span>
             <span>Settings</span>
@@ -615,6 +687,6 @@
     </aside>
 
     <script src="categories.js?v=20260626"></script>
-    <script src="app.js?v=20260626-admin"></script>
+    <script src="app.js?v=20260626-password-reset"></script>
   </body>
 </html>

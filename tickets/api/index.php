@@ -109,6 +109,77 @@ try {
         json_response(['ok' => true]);
     }
 
+    if ($action === 'request-password-reset') {
+        $body = read_json_body();
+        $email = strtolower(trim_to_limit($body['email'] ?? '', 190));
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            json_response(['error' => 'A valid email address is required.'], 400);
+        }
+
+        $stmt = $pdo->prepare('SELECT id, name, email FROM users WHERE LOWER(email) = LOWER(?) AND active = 1 LIMIT 1');
+        $stmt->execute([$email]);
+        $user = $stmt->fetch();
+
+        if ($user) {
+            $token = bin2hex(random_bytes(32));
+            $tokenHash = hash('sha256', $token);
+            $expiresAt = (new DateTimeImmutable('+60 minutes'))->format('Y-m-d H:i:s');
+
+            $pdo->prepare('UPDATE password_resets SET used_at = NOW() WHERE user_id = ? AND used_at IS NULL')->execute([(int) $user['id']]);
+            $resetStmt = $pdo->prepare('INSERT INTO password_resets (user_id, email, token_hash, expires_at) VALUES (?, ?, ?, ?)');
+            $resetStmt->execute([(int) $user['id'], (string) $user['email'], $tokenHash, $expiresAt]);
+
+            $resetLink = app_base_url() . '/?reset=' . rawurlencode($token);
+            send_password_reset_email($user, $resetLink);
+        }
+
+        json_response(['message' => 'If that email belongs to an active account, a password reset link has been sent.']);
+    }
+
+    if ($action === 'reset-password') {
+        $body = read_json_body();
+        $token = trim((string) ($body['token'] ?? ''));
+        $newPassword = (string) ($body['newPassword'] ?? '');
+
+        if ($token === '' || strlen($newPassword) < 10) {
+            json_response(['error' => 'Reset link and a new password of at least 10 characters are required.'], 400);
+        }
+
+        $tokenHash = hash('sha256', $token);
+        $stmt = $pdo->prepare('
+            SELECT password_resets.id AS reset_id, users.id AS user_id
+            FROM password_resets
+            INNER JOIN users ON users.id = password_resets.user_id
+            WHERE password_resets.token_hash = ?
+                AND password_resets.used_at IS NULL
+                AND password_resets.expires_at >= NOW()
+                AND users.active = 1
+            ORDER BY password_resets.id DESC
+            LIMIT 1
+        ');
+        $stmt->execute([$tokenHash]);
+        $reset = $stmt->fetch();
+        if (!$reset) {
+            json_response(['error' => 'That reset link is invalid or expired.'], 400);
+        }
+
+        $pdo->beginTransaction();
+        try {
+            $newHash = password_hash($newPassword, PASSWORD_DEFAULT);
+            $pdo->prepare('UPDATE users SET password_hash = ?, password_reset_required = 0 WHERE id = ?')->execute([$newHash, (int) $reset['user_id']]);
+            $pdo->prepare('UPDATE password_resets SET used_at = NOW() WHERE id = ?')->execute([(int) $reset['reset_id']]);
+            $pdo->commit();
+        } catch (Throwable $error) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $error;
+        }
+
+        destroy_session_cookie();
+        json_response(['message' => 'Your password has been reset. Sign in with the new password.']);
+    }
+
     $currentUser = require_login($pdo);
 
     if ($action === 'change-password') {
