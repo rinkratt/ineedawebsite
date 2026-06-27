@@ -6,7 +6,7 @@
     <title>Ticket System</title>
     <link rel="icon" href="/favicon.ico?v=ineedawebsite-20260621" type="image/x-icon" sizes="any" />
     <link rel="shortcut icon" href="/favicon.ico?v=ineedawebsite-20260621" type="image/x-icon" />
-    <link rel="stylesheet" href="styles.css?v=20260627-settings-directory" />
+    <link rel="stylesheet" href="styles.css?v=20260627-category-rules" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -589,6 +589,42 @@
                     <button class="secondary-button" id="addCategoryButton" type="button">Add</button>
                   </div>
                 </div>
+                <form class="category-add-form" id="categoryAddForm" hidden>
+                  <div class="category-add-grid">
+                    <label>
+                      Category
+                      <input id="newCategoryName" list="categoryLevelOneOptions" placeholder="Please select or type new" required />
+                    </label>
+                    <label>
+                      Sub-Category
+                      <input id="newSubCategoryName" list="categoryLevelTwoOptions" placeholder="Please select or type new" required />
+                    </label>
+                    <label>
+                      Third Level Category
+                      <input id="newThirdCategoryName" list="categoryLevelThreeOptions" placeholder="Please select or type new" />
+                    </label>
+                  </div>
+                  <label>
+                    Description
+                    <textarea id="newCategoryDescription" rows="3"></textarea>
+                  </label>
+                  <div class="category-rules-grid">
+                    <label class="check-label"><input id="newCategoryVisibleSsp" type="checkbox" checked /> Visible in SSP</label>
+                    <label class="check-label"><input id="newCategoryVisibleAdmin" type="checkbox" checked /> Visible to admin</label>
+                    <label class="check-label"><input id="newCategoryIncident" type="checkbox" checked /> Incident</label>
+                    <label class="check-label"><input id="newCategoryRequest" type="checkbox" checked /> Request</label>
+                    <label class="check-label"><input id="newCategoryChange" type="checkbox" checked /> Change</label>
+                    <label class="check-label"><input id="newCategoryProblem" type="checkbox" checked /> Problem</label>
+                  </div>
+                  <div class="category-form-actions">
+                    <button class="primary-button" type="submit" data-category-add-mode="done">Done</button>
+                    <button class="secondary-button" id="cancelCategoryAddButton" type="button">Cancel</button>
+                    <button class="secondary-button" type="submit" data-category-add-mode="new">Save & New</button>
+                  </div>
+                </form>
+                <datalist id="categoryLevelOneOptions"></datalist>
+                <datalist id="categoryLevelTwoOptions"></datalist>
+                <datalist id="categoryLevelThreeOptions"></datalist>
                 <div class="settings-list category-settings-list" id="categorySettingsList"></div>
               </article>
             </section>
@@ -761,6 +797,6 @@
     </aside>
 
     <script src="categories.js?v=20260626"></script>
-    <script src="app.js?v=20260627-settings-directory"></script>
+    <script src="app.js?v=20260627-category-rules"></script>
   </body>
 </html>

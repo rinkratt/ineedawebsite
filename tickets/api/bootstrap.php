@@ -104,6 +104,11 @@ function users_table_has_column(PDO $pdo, string $column): bool
     return table_has_column($pdo, 'users', $column);
 }
 
+function ticket_categories_table_has_column(PDO $pdo, string $column): bool
+{
+    return table_has_column($pdo, 'ticket_categories', $column);
+}
+
 function ensure_password_reset_schema(PDO $pdo): void
 {
     $pdo->exec("
@@ -183,12 +188,41 @@ function ensure_settings_schema(PDO $pdo): void
             category VARCHAR(100) NOT NULL DEFAULT '',
             sub_category VARCHAR(100) NOT NULL DEFAULT '',
             third_category VARCHAR(100) NOT NULL DEFAULT '',
+            description TEXT NULL,
+            visible_ssp TINYINT(1) NOT NULL DEFAULT 1,
+            visible_admin TINYINT(1) NOT NULL DEFAULT 1,
+            enable_incident TINYINT(1) NOT NULL DEFAULT 1,
+            enable_request TINYINT(1) NOT NULL DEFAULT 1,
+            enable_change TINYINT(1) NOT NULL DEFAULT 1,
+            enable_problem TINYINT(1) NOT NULL DEFAULT 1,
             sort_order INT NOT NULL DEFAULT 0,
             active TINYINT(1) NOT NULL DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_ticket_category_sort (sort_order, id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+
+    if (!ticket_categories_table_has_column($pdo, 'description')) {
+        $pdo->exec('ALTER TABLE ticket_categories ADD COLUMN description TEXT NULL AFTER third_category');
+    }
+    if (!ticket_categories_table_has_column($pdo, 'visible_ssp')) {
+        $pdo->exec('ALTER TABLE ticket_categories ADD COLUMN visible_ssp TINYINT(1) NOT NULL DEFAULT 1 AFTER description');
+    }
+    if (!ticket_categories_table_has_column($pdo, 'visible_admin')) {
+        $pdo->exec('ALTER TABLE ticket_categories ADD COLUMN visible_admin TINYINT(1) NOT NULL DEFAULT 1 AFTER visible_ssp');
+    }
+    if (!ticket_categories_table_has_column($pdo, 'enable_incident')) {
+        $pdo->exec('ALTER TABLE ticket_categories ADD COLUMN enable_incident TINYINT(1) NOT NULL DEFAULT 1 AFTER visible_admin');
+    }
+    if (!ticket_categories_table_has_column($pdo, 'enable_request')) {
+        $pdo->exec('ALTER TABLE ticket_categories ADD COLUMN enable_request TINYINT(1) NOT NULL DEFAULT 1 AFTER enable_incident');
+    }
+    if (!ticket_categories_table_has_column($pdo, 'enable_change')) {
+        $pdo->exec('ALTER TABLE ticket_categories ADD COLUMN enable_change TINYINT(1) NOT NULL DEFAULT 1 AFTER enable_request');
+    }
+    if (!ticket_categories_table_has_column($pdo, 'enable_problem')) {
+        $pdo->exec('ALTER TABLE ticket_categories ADD COLUMN enable_problem TINYINT(1) NOT NULL DEFAULT 1 AFTER enable_change');
+    }
 
     seed_ticket_priorities($pdo);
     seed_ticket_statuses($pdo);
@@ -241,8 +275,8 @@ function seed_ticket_categories(PDO $pdo): void
     }
 
     $stmt = $pdo->prepare('
-        INSERT INTO ticket_categories (sysaid_id, category, sub_category, third_category, sort_order, active)
-        VALUES (?, ?, ?, ?, ?, 1)
+        INSERT INTO ticket_categories (sysaid_id, category, sub_category, third_category, description, visible_ssp, visible_admin, enable_incident, enable_request, enable_change, enable_problem, sort_order, active)
+        VALUES (?, ?, ?, ?, ?, 1, 1, 1, 1, 1, 1, ?, 1)
     ');
     foreach ($categories as $index => $category) {
         $stmt->execute([
@@ -250,6 +284,7 @@ function seed_ticket_categories(PDO $pdo): void
             trim((string) ($category['category'] ?? '')),
             trim((string) ($category['subCategory'] ?? $category['sub_category'] ?? '')),
             trim((string) ($category['thirdCategory'] ?? $category['third_category'] ?? '')),
+            trim((string) ($category['description'] ?? '')),
             $index + 1,
         ]);
     }
@@ -382,10 +417,17 @@ function settings_payload(PDO $pdo): array
                 'category' => (string) $category['category'],
                 'subCategory' => (string) $category['sub_category'],
                 'thirdCategory' => (string) $category['third_category'],
+                'description' => (string) ($category['description'] ?? ''),
+                'visibleSsp' => !array_key_exists('visible_ssp', $category) || !empty($category['visible_ssp']),
+                'visibleAdmin' => !array_key_exists('visible_admin', $category) || !empty($category['visible_admin']),
+                'enableIncident' => !array_key_exists('enable_incident', $category) || !empty($category['enable_incident']),
+                'enableRequest' => !array_key_exists('enable_request', $category) || !empty($category['enable_request']),
+                'enableChange' => !array_key_exists('enable_change', $category) || !empty($category['enable_change']),
+                'enableProblem' => !array_key_exists('enable_problem', $category) || !empty($category['enable_problem']),
                 'sortOrder' => (int) $category['sort_order'],
                 'active' => !empty($category['active']),
             ];
-        }, $pdo->query('SELECT id, sysaid_id, category, sub_category, third_category, sort_order, active FROM ticket_categories ORDER BY sort_order, id')->fetchAll()),
+        }, $pdo->query('SELECT id, sysaid_id, category, sub_category, third_category, description, visible_ssp, visible_admin, enable_incident, enable_request, enable_change, enable_problem, sort_order, active FROM ticket_categories ORDER BY sort_order, id')->fetchAll()),
     ];
 }
 

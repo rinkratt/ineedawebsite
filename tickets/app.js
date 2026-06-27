@@ -1,6 +1,12 @@
 const API_URL = "api/index.php";
 
 const typeNames = ["All", "Incident", "Problem", "Request", "Change"];
+const categoryTypeFields = {
+  Incident: "enableIncident",
+  Request: "enableRequest",
+  Change: "enableChange",
+  Problem: "enableProblem",
+};
 const defaultPriorityOptions = ["P1-Highest", "P2-High", "P3-Medium", "P4-Normal", "P5-Low"];
 const defaultStatusOptions = ["New", "Open", "In Progress", "Escalated", "Waiting on Customer", "User Responded", "Pending Vendor", "On Hold", "Resolved", "Closed", "Cancelled"];
 let priorityOptions = [...defaultPriorityOptions];
@@ -36,6 +42,7 @@ let categorySettingsSearch = "";
 let settingsDirectorySearch = "";
 let activeSettingsPage = "home";
 let activeUserSettingsMode = "admins";
+let categoryAddMode = "done";
 const aiAssists = new Map();
 let aiChatBusy = false;
 const aiChatMessages = [
@@ -160,6 +167,21 @@ const els = {
   statusSettingsList: document.querySelector("#statusSettingsList"),
   categorySettingsList: document.querySelector("#categorySettingsList"),
   categorySettingsSearch: document.querySelector("#categorySettingsSearch"),
+  categoryAddForm: document.querySelector("#categoryAddForm"),
+  cancelCategoryAdd: document.querySelector("#cancelCategoryAddButton"),
+  newCategoryName: document.querySelector("#newCategoryName"),
+  newSubCategoryName: document.querySelector("#newSubCategoryName"),
+  newThirdCategoryName: document.querySelector("#newThirdCategoryName"),
+  newCategoryDescription: document.querySelector("#newCategoryDescription"),
+  newCategoryVisibleSsp: document.querySelector("#newCategoryVisibleSsp"),
+  newCategoryVisibleAdmin: document.querySelector("#newCategoryVisibleAdmin"),
+  newCategoryIncident: document.querySelector("#newCategoryIncident"),
+  newCategoryRequest: document.querySelector("#newCategoryRequest"),
+  newCategoryChange: document.querySelector("#newCategoryChange"),
+  newCategoryProblem: document.querySelector("#newCategoryProblem"),
+  categoryLevelOneOptions: document.querySelector("#categoryLevelOneOptions"),
+  categoryLevelTwoOptions: document.querySelector("#categoryLevelTwoOptions"),
+  categoryLevelThreeOptions: document.querySelector("#categoryLevelThreeOptions"),
   userSettingsList: document.querySelector("#userSettingsList"),
   userSettingsHeading: document.querySelector("#userSettingsHeading"),
   addUserForm: document.querySelector("#addUserForm"),
@@ -188,6 +210,7 @@ els.settingsNav.addEventListener("click", () => switchView("settings"));
 els.closeCompose.addEventListener("click", closeCompose);
 els.cancel.addEventListener("click", closeCompose);
 els.form.addEventListener("submit", saveTicket);
+els.typeInput.addEventListener("change", () => renderCategoryOptions(""));
 els.aiChatForm.addEventListener("submit", sendAiChatMessage);
 els.settingsBack.addEventListener("click", showSettingsHome);
 els.settingsHome.addEventListener("click", openSettingsFromEvent);
@@ -198,11 +221,17 @@ els.settingsDirectorySearch.addEventListener("input", () => {
 els.saveSettings.addEventListener("click", saveSettings);
 els.addPriority.addEventListener("click", () => addSettingRow("priority"));
 els.addStatus.addEventListener("click", () => addSettingRow("status"));
-els.addCategory.addEventListener("click", () => addSettingRow("category"));
+els.addCategory.addEventListener("click", showCategoryAddForm);
 els.categorySettingsSearch.addEventListener("input", () => {
   categorySettingsSearch = els.categorySettingsSearch.value.trim().toLowerCase();
   renderCategorySettings();
 });
+els.categoryAddForm.addEventListener("submit", saveCategoryFromForm);
+els.categoryAddForm.addEventListener("click", (event) => {
+  const submitButton = event.target.closest("[data-category-add-mode]");
+  if (submitButton) categoryAddMode = submitButton.dataset.categoryAddMode || "done";
+});
+els.cancelCategoryAdd.addEventListener("click", hideCategoryAddForm);
 els.addUserForm.addEventListener("submit", saveNewUser);
 els.prioritySettingsList.addEventListener("input", updateSettingFromEvent);
 els.prioritySettingsList.addEventListener("change", updateSettingFromEvent);
@@ -683,14 +712,28 @@ function renderAssigneeInput(selected = "") {
 }
 
 function normalizeCategoryOption(option = {}) {
+  const enableIncident = option.enableIncident ?? option.enable_incident ?? true;
+  const enableRequest = option.enableRequest ?? option.enable_request ?? true;
+  const enableChange = option.enableChange ?? option.enable_change ?? true;
+  const enableProblem = option.enableProblem ?? option.enable_problem ?? true;
+  const visibleSsp = option.visibleSsp ?? option.visible_ssp ?? true;
+  const visibleAdmin = option.visibleAdmin ?? option.visible_admin ?? option.active ?? true;
+  const hasTypeEnabled = Boolean(enableIncident || enableRequest || enableChange || enableProblem);
   return {
     id: option.id || "",
     sysAidId: option.sysAidId || option.sysaid_id || null,
     category: String(option.category || "Application"),
     subCategory: String(option.subCategory || option.sub_category || ""),
     thirdCategory: String(option.thirdCategory || option.third_category || ""),
+    description: String(option.description || ""),
+    visibleSsp: visibleSsp !== false,
+    visibleAdmin: visibleAdmin !== false,
+    enableIncident: enableIncident !== false,
+    enableRequest: enableRequest !== false,
+    enableChange: enableChange !== false,
+    enableProblem: enableProblem !== false,
     sortOrder: Number(option.sortOrder || option.sort_order || 0),
-    active: option.active !== false,
+    active: option.active !== false && (visibleSsp !== false || visibleAdmin !== false) && hasTypeEnabled,
   };
 }
 
@@ -709,8 +752,16 @@ function categoryOptionFromKey(key) {
   return category ? normalizeCategoryOption({ category, subCategory, thirdCategory }) : null;
 }
 
-function activeCategoryOptions() {
-  return categoryOptions.filter((option) => option.active !== false);
+function categorySupportsTicketType(option, type) {
+  const field = categoryTypeFields[type] || "";
+  return !field || normalizeCategoryOption(option)[field] !== false;
+}
+
+function activeCategoryOptions(type = els.typeInput?.value || "Incident") {
+  return categoryOptions.filter((option) => {
+    const normalized = normalizeCategoryOption(option);
+    return normalized.active !== false && normalized.visibleAdmin !== false && categorySupportsTicketType(normalized, type);
+  });
 }
 
 function categoryOptionFromTicket(ticket) {
@@ -731,12 +782,12 @@ function selectedCategoryOption() {
 }
 
 function renderCategoryOptions(selectedKey, currentCategory = null) {
-  const options = [...activeCategoryOptions()];
+  const options = [...activeCategoryOptions(els.typeInput.value)];
   const current = currentCategory ? normalizeCategoryOption(currentCategory) : null;
   if (current && !options.some((option) => categoryOptionKey(option) === categoryOptionKey(current))) {
     options.unshift(current);
   }
-  const fallbackKey = categoryOptionKey(options[0]);
+  const fallbackKey = options.length ? categoryOptionKey(options[0]) : "";
   const validSelectedKey = selectedKey && options.some((option) => categoryOptionKey(option) === selectedKey) ? selectedKey : fallbackKey;
   els.categoryInput.innerHTML = options.map((option) => {
     const key = categoryOptionKey(option);
@@ -1058,14 +1109,14 @@ function cleanCitationUrl(url) {
 }
 
 function openCompose(ticket = null) {
-  const selectedCategory = ticket ? categoryOptionFromTicket(ticket) : activeCategoryOptions()[0] || categoryOptions[0];
-  const selectedCategoryKey = categoryOptionKey(selectedCategory);
   const selectedPriority = ticket?.priority || priorityOptions[priorityOptions.length - 1] || "P5-Low";
   const selectedStatus = ticket?.status || statusOptions[0] || "New";
   els.composePanel.hidden = false;
   els.ticketId.value = ticket?.id || "";
   els.titleInput.value = ticket?.title || "DEFAULT";
   els.typeInput.value = ticket?.type || "Incident";
+  const selectedCategory = ticket ? categoryOptionFromTicket(ticket) : activeCategoryOptions(els.typeInput.value)[0] || categoryOptions[0];
+  const selectedCategoryKey = categoryOptionKey(selectedCategory);
   els.templateInput.value = ticket?.template || "DEFAULT";
   els.priorityInput.innerHTML = renderSelectOptions(priorityOptions, selectedPriority);
   els.priorityInput.value = selectedPriority;
@@ -1349,6 +1400,7 @@ function renderStatusSettings() {
 }
 
 function renderCategorySettings() {
+  renderCategoryDatalists();
   const rows = categoryOptions
     .map((category, index) => ({ category, index }))
     .filter(({ category }) => {
@@ -1356,15 +1408,109 @@ function renderCategorySettings() {
       return categoryOptionLabel(category).toLowerCase().includes(categorySettingsSearch);
     });
 
+  if (!rows.length) {
+    els.categorySettingsList.innerHTML = `<div class="empty-state">No categories found</div>`;
+    return;
+  }
+
   els.categorySettingsList.innerHTML = rows.map(({ category, index }) => `
     <div class="setting-row category-setting-row" data-setting-type="category" data-index="${index}">
-      <input class="setting-input" data-setting-field="category" value="${escapeHtml(category.category)}" placeholder="Category" />
-      <input class="setting-input" data-setting-field="subCategory" value="${escapeHtml(category.subCategory)}" placeholder="Sub-category" />
-      <input class="setting-input" data-setting-field="thirdCategory" value="${escapeHtml(category.thirdCategory)}" placeholder="Third category" />
-      <label class="check-label"><input data-setting-field="active" type="checkbox"${category.active ? " checked" : ""} /> Active</label>
+      <input class="setting-input" list="categoryLevelOneOptions" data-setting-field="category" value="${escapeHtml(category.category)}" placeholder="Category" />
+      <input class="setting-input" list="categoryLevelTwoOptions" data-setting-field="subCategory" value="${escapeHtml(category.subCategory)}" placeholder="Sub-category" />
+      <input class="setting-input" list="categoryLevelThreeOptions" data-setting-field="thirdCategory" value="${escapeHtml(category.thirdCategory)}" placeholder="Third category" />
+      <input class="setting-input category-description-input" data-setting-field="description" value="${escapeHtml(category.description)}" placeholder="Description" />
+      <div class="category-row-flags">
+        <label class="check-label"><input data-setting-field="visibleSsp" type="checkbox"${category.visibleSsp ? " checked" : ""} /> SSP</label>
+        <label class="check-label"><input data-setting-field="visibleAdmin" type="checkbox"${category.visibleAdmin ? " checked" : ""} /> Admin</label>
+        <label class="check-label"><input data-setting-field="enableIncident" type="checkbox"${category.enableIncident ? " checked" : ""} /> Incident</label>
+        <label class="check-label"><input data-setting-field="enableRequest" type="checkbox"${category.enableRequest ? " checked" : ""} /> Request</label>
+        <label class="check-label"><input data-setting-field="enableChange" type="checkbox"${category.enableChange ? " checked" : ""} /> Change</label>
+        <label class="check-label"><input data-setting-field="enableProblem" type="checkbox"${category.enableProblem ? " checked" : ""} /> Problem</label>
+      </div>
       <button class="ghost-icon" data-remove-setting type="button" title="Remove category" aria-label="Remove category">X</button>
     </div>
   `).join("");
+}
+
+function uniqueCategoryValues(field) {
+  return [...new Set(categoryOptions.map((category) => normalizeCategoryOption(category)[field]).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+}
+
+function renderCategoryDatalists() {
+  els.categoryLevelOneOptions.innerHTML = uniqueCategoryValues("category").map((value) => `<option value="${escapeHtml(value)}"></option>`).join("");
+  els.categoryLevelTwoOptions.innerHTML = uniqueCategoryValues("subCategory").map((value) => `<option value="${escapeHtml(value)}"></option>`).join("");
+  els.categoryLevelThreeOptions.innerHTML = uniqueCategoryValues("thirdCategory").map((value) => `<option value="${escapeHtml(value)}"></option>`).join("");
+}
+
+function showCategoryAddForm() {
+  resetCategoryAddForm();
+  renderCategoryDatalists();
+  els.categoryAddForm.hidden = false;
+  els.newCategoryName.focus();
+}
+
+function hideCategoryAddForm() {
+  els.categoryAddForm.hidden = true;
+  resetCategoryAddForm();
+}
+
+function resetCategoryAddForm() {
+  els.categoryAddForm.reset();
+  els.newCategoryVisibleSsp.checked = true;
+  els.newCategoryVisibleAdmin.checked = true;
+  els.newCategoryIncident.checked = true;
+  els.newCategoryRequest.checked = true;
+  els.newCategoryChange.checked = true;
+  els.newCategoryProblem.checked = true;
+  categoryAddMode = "done";
+}
+
+function categoryFromAddForm() {
+  return normalizeCategoryOption({
+    id: `new-category-${Date.now()}`,
+    category: els.newCategoryName.value.trim(),
+    subCategory: els.newSubCategoryName.value.trim(),
+    thirdCategory: els.newThirdCategoryName.value.trim(),
+    description: els.newCategoryDescription.value.trim(),
+    visibleSsp: els.newCategoryVisibleSsp.checked,
+    visibleAdmin: els.newCategoryVisibleAdmin.checked,
+    enableIncident: els.newCategoryIncident.checked,
+    enableRequest: els.newCategoryRequest.checked,
+    enableChange: els.newCategoryChange.checked,
+    enableProblem: els.newCategoryProblem.checked,
+    sortOrder: categoryOptions.length + 1,
+  });
+}
+
+function saveCategoryFromForm(event) {
+  event.preventDefault();
+  const mode = event.submitter?.dataset.categoryAddMode || categoryAddMode;
+  const category = categoryFromAddForm();
+  if (!category.category || !category.subCategory) {
+    alert("Category and Sub-Category are required.");
+    return;
+  }
+  if (!category.enableIncident && !category.enableRequest && !category.enableChange && !category.enableProblem) {
+    alert("Select at least one ticket type for this category.");
+    return;
+  }
+  const nextKey = categoryOptionKey(category).toLowerCase();
+  if (categoryOptions.some((option) => categoryOptionKey(option).toLowerCase() === nextKey)) {
+    alert("That category already exists.");
+    return;
+  }
+
+  categoryOptions.push(category);
+  renderCategorySettings();
+  renderCategoryOptions(els.categoryInput.value);
+
+  if (mode === "new") {
+    resetCategoryAddForm();
+    els.newCategoryName.focus();
+    return;
+  }
+
+  hideCategoryAddForm();
 }
 
 function renderUserSettings() {
@@ -1409,8 +1555,7 @@ function addSettingRow(type) {
     renderStatusSettings();
   }
   if (type === "category") {
-    categoryOptions.push({ id: `new-category-${Date.now()}`, category: "", subCategory: "", thirdCategory: "", active: true, sortOrder: categoryOptions.length + 1 });
-    renderCategorySettings();
+    showCategoryAddForm();
   }
 }
 
@@ -1424,6 +1569,10 @@ function updateSettingFromEvent(event) {
   const collection = type === "priority" ? prioritySettings : type === "status" ? statusSettings : categoryOptions;
   if (!collection[index]) return;
   collection[index][field] = value;
+  if (type === "category") {
+    collection[index] = normalizeCategoryOption(collection[index]);
+    renderCategoryOptions(els.categoryInput.value);
+  }
 }
 
 function removeSettingFromEvent(event) {

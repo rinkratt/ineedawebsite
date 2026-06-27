@@ -845,6 +845,39 @@ label textarea,
   gap: 8px;
 }
 
+.category-add-form {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  background: #fbfbfc;
+}
+
+.category-add-form[hidden] {
+  display: none;
+}
+
+.category-add-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.category-rules-grid,
+.category-row-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: center;
+}
+
+.category-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .compact-settings-list {
   max-height: 420px;
   overflow: auto;
@@ -871,7 +904,11 @@ label textarea,
 }
 
 .category-setting-row {
-  grid-template-columns: minmax(140px, 1fr) minmax(150px, 1fr) minmax(150px, 1fr) auto auto;
+  grid-template-columns: minmax(130px, 1fr) minmax(140px, 1fr) minmax(140px, 1fr) minmax(160px, 1.2fr) minmax(280px, 1.4fr) auto;
+}
+
+.category-row-flags {
+  min-width: 0;
 }
 
 .user-setting-row {
@@ -1518,6 +1555,7 @@ dd {
   }
 
   .settings-form,
+  .category-add-grid,
   .user-setting-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1557,6 +1595,7 @@ dd {
   .ai-grid,
   .detail-grid,
   .settings-form,
+  .category-add-grid,
   .setting-row,
   .status-setting-row,
   .category-setting-row,

@@ -55,18 +55,34 @@ function normalize_category_settings(array $rows): array
         $category = trim_to_limit($row['category'] ?? '', 100);
         $subCategory = trim_to_limit($row['subCategory'] ?? $row['sub_category'] ?? '', 100);
         $thirdCategory = trim_to_limit($row['thirdCategory'] ?? $row['third_category'] ?? '', 100);
+        $description = trim_to_limit($row['description'] ?? '', 500);
+        $visibleSsp = array_key_exists('visibleSsp', $row) ? !empty($row['visibleSsp']) : (!array_key_exists('visible_ssp', $row) || !empty($row['visible_ssp']));
+        $visibleAdmin = array_key_exists('visibleAdmin', $row) ? !empty($row['visibleAdmin']) : (!array_key_exists('visible_admin', $row) || !empty($row['visible_admin']));
+        $enableIncident = array_key_exists('enableIncident', $row) ? !empty($row['enableIncident']) : (!array_key_exists('enable_incident', $row) || !empty($row['enable_incident']));
+        $enableRequest = array_key_exists('enableRequest', $row) ? !empty($row['enableRequest']) : (!array_key_exists('enable_request', $row) || !empty($row['enable_request']));
+        $enableChange = array_key_exists('enableChange', $row) ? !empty($row['enableChange']) : (!array_key_exists('enable_change', $row) || !empty($row['enable_change']));
+        $enableProblem = array_key_exists('enableProblem', $row) ? !empty($row['enableProblem']) : (!array_key_exists('enable_problem', $row) || !empty($row['enable_problem']));
+        $rowActive = !array_key_exists('active', $row) || !empty($row['active']);
         $key = strtolower($category . "\n" . $subCategory . "\n" . $thirdCategory);
         if ($category === '' || $subCategory === '' || isset($seen[$key])) {
             continue;
         }
 
+        $hasTypeEnabled = $enableIncident || $enableRequest || $enableChange || $enableProblem;
         $seen[$key] = true;
         $normalized[] = [
             'sysAidId' => isset($row['sysAidId']) && $row['sysAidId'] !== '' ? (int) $row['sysAidId'] : null,
             'category' => $category,
             'subCategory' => $subCategory,
             'thirdCategory' => $thirdCategory,
-            'active' => !empty($row['active']),
+            'description' => $description,
+            'visibleSsp' => $visibleSsp,
+            'visibleAdmin' => $visibleAdmin,
+            'enableIncident' => $enableIncident,
+            'enableRequest' => $enableRequest,
+            'enableChange' => $enableChange,
+            'enableProblem' => $enableProblem,
+            'active' => $rowActive && ($visibleSsp || $visibleAdmin) && $hasTypeEnabled,
         ];
     }
 
@@ -272,13 +288,36 @@ try {
             }
 
             $pdo->exec('DELETE FROM ticket_categories');
-            $categoryStmt = $pdo->prepare('INSERT INTO ticket_categories (sysaid_id, category, sub_category, third_category, sort_order, active) VALUES (?, ?, ?, ?, ?, ?)');
+            $categoryStmt = $pdo->prepare('
+                INSERT INTO ticket_categories (
+                    sysaid_id,
+                    category,
+                    sub_category,
+                    third_category,
+                    description,
+                    visible_ssp,
+                    visible_admin,
+                    enable_incident,
+                    enable_request,
+                    enable_change,
+                    enable_problem,
+                    sort_order,
+                    active
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ');
             foreach ($categories as $index => $category) {
                 $categoryStmt->execute([
                     $category['sysAidId'],
                     $category['category'],
                     $category['subCategory'],
                     $category['thirdCategory'],
+                    $category['description'],
+                    $category['visibleSsp'] ? 1 : 0,
+                    $category['visibleAdmin'] ? 1 : 0,
+                    $category['enableIncident'] ? 1 : 0,
+                    $category['enableRequest'] ? 1 : 0,
+                    $category['enableChange'] ? 1 : 0,
+                    $category['enableProblem'] ? 1 : 0,
                     $index + 1,
                     $category['active'] ? 1 : 0,
                 ]);
