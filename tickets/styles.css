@@ -168,13 +168,18 @@ button {
 .sidebar {
   display: flex;
   flex-direction: column;
-  gap: 28px;
-  padding: 28px 22px;
+  position: sticky;
+  top: 0;
+  align-self: start;
+  min-height: 100vh;
+  gap: 18px;
+  padding: 22px;
   border-right: 1px solid var(--line);
   background: var(--panel);
 }
 
 .brand {
+  order: 1;
   display: flex;
   align-items: center;
   gap: 14px;
@@ -223,6 +228,7 @@ h3 {
 }
 
 .nav-list {
+  order: 2;
   display: grid;
   gap: 8px;
 }
@@ -268,18 +274,19 @@ h3 {
 }
 
 .sidebar-create {
+  order: 3;
   width: 100%;
 }
 
 .sidebar-section {
+  order: 5;
   display: grid;
-  gap: 10px;
-  margin-top: auto;
+  gap: 8px;
 }
 
 .mini-stat {
   display: flex;
-  min-height: 42px;
+  min-height: 36px;
   align-items: center;
   justify-content: space-between;
   border-top: 1px solid var(--line);
@@ -291,10 +298,11 @@ h3 {
 }
 
 .account-panel {
+  order: 4;
   display: grid;
-  gap: 12px;
+  gap: 10px;
   border-top: 1px solid var(--line);
-  padding-top: 18px;
+  padding-top: 14px;
 }
 
 .account-panel span,
@@ -1389,8 +1397,11 @@ dd {
 
   .sidebar {
     display: grid;
+    position: static;
+    min-height: auto;
     grid-template-columns: 1fr auto;
     align-items: center;
+    gap: 14px;
     padding: 18px;
   }
 
