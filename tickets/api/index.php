@@ -120,6 +120,8 @@ function normalize_company_payload(array $body): array
         'zip' => trim_to_limit($body['zip'] ?? '', 30),
         'phone' => trim_to_limit($body['phone'] ?? '', 60),
         'notes' => trim_to_limit($body['notes'] ?? '', 2000),
+        'workspaceLabel' => trim_to_limit($body['workspaceLabel'] ?? $body['workspace_label'] ?? 'Workspace', 80) ?: 'Workspace',
+        'appTitle' => trim_to_limit($body['appTitle'] ?? $body['app_title'] ?? 'Ticket System', 120) ?: 'Ticket System',
         'logoName' => $logoDataUrl === '' ? '' : trim_to_limit($body['logoName'] ?? $body['logo_name'] ?? '', 190),
         'logoDataUrl' => $logoDataUrl,
         'logoUrl' => '/logo.svg',
@@ -162,6 +164,10 @@ try {
     if ($action === 'logout') {
         destroy_session_cookie();
         json_response(['ok' => true]);
+    }
+
+    if ($action === 'public-branding') {
+        json_response(['branding' => branding_payload($pdo)]);
     }
 
     if ($action === 'request-password-reset') {
@@ -446,6 +452,8 @@ try {
             'zip' => $company['zip'],
             'phone' => $company['phone'],
             'notes' => $company['notes'],
+            'workspace_label' => $company['workspaceLabel'],
+            'app_title' => $company['appTitle'],
             'logo_name' => $company['logoName'],
             'logo_data_url' => $company['logoDataUrl'],
             'logo_url' => $company['logoUrl'],
@@ -465,6 +473,8 @@ try {
                     zip = :zip,
                     phone = :phone,
                     notes = :notes,
+                    workspace_label = :workspace_label,
+                    app_title = :app_title,
                     logo_name = :logo_name,
                     logo_data_url = :logo_data_url,
                     logo_url = :logo_url,
@@ -475,12 +485,12 @@ try {
             ')->execute($fields);
         } else {
             $pdo->prepare('
-                INSERT INTO companies (name, address, address2, city, state, zip, phone, notes, logo_name, logo_data_url, logo_url, theme, active)
-                VALUES (:name, :address, :address2, :city, :state, :zip, :phone, :notes, :logo_name, :logo_data_url, :logo_url, :theme, :active)
+                INSERT INTO companies (name, address, address2, city, state, zip, phone, notes, workspace_label, app_title, logo_name, logo_data_url, logo_url, theme, active)
+                VALUES (:name, :address, :address2, :city, :state, :zip, :phone, :notes, :workspace_label, :app_title, :logo_name, :logo_data_url, :logo_url, :theme, :active)
             ')->execute($fields);
         }
 
-        json_response(['companies' => companies_payload($pdo)]);
+        json_response(['companies' => companies_payload($pdo), 'branding' => branding_payload($pdo)]);
     }
 
     if ($action === 'save-ticket') {

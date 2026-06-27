@@ -24,11 +24,24 @@ const fallbackCategories = [
 ];
 const defaultCompanyLogo = "/logo.svg";
 const maxCompanyLogoBytes = 1500000;
+const defaultBranding = {
+  workspaceLabel: "Workspace",
+  appTitle: "Ticket System",
+  logoName: "",
+  logoDataUrl: "",
+  logoUrl: defaultCompanyLogo,
+  theme: "light",
+};
+const themeStorageKey = "ticket-system-theme";
 let categoryOptions = (Array.isArray(window.ticketCategories) && window.ticketCategories.length ? window.ticketCategories : fallbackCategories).map(normalizeCategoryOption);
 let companies = [];
+let branding = normalizeBranding(defaultBranding);
 let activeCompanyId = null;
 let pendingCompanyLogoDataUrl = "";
 let pendingCompanyLogoName = "";
+
+const initialTheme = readStoredTheme();
+if (initialTheme) document.documentElement.dataset.theme = initialTheme;
 
 const defaultUsers = [
   { id: 1, name: "Kelly Cox", email: "kelly.cox@ineedawebsite.us", role: "Admin" },
@@ -88,6 +101,10 @@ const els = {
   passwordChangeError: document.querySelector("#passwordChangeError"),
   currentUserName: document.querySelector("#currentUserName"),
   currentUserRole: document.querySelector("#currentUserRole"),
+  themeToggle: document.querySelector("#themeToggleButton"),
+  brandLogos: document.querySelectorAll("[data-brand-logo]"),
+  brandWorkspaceLabels: document.querySelectorAll("[data-brand-workspace]"),
+  brandTitles: document.querySelectorAll("[data-brand-title]"),
   logoutButton: document.querySelector("#logoutButton"),
   dashboardView: document.querySelector("#dashboardView"),
   ticketsView: document.querySelector("#ticketsView"),
@@ -204,6 +221,8 @@ const els = {
   companySettingsForm: document.querySelector("#companySettingsForm"),
   companyId: document.querySelector("#companyId"),
   companyName: document.querySelector("#companyName"),
+  companyWorkspaceLabel: document.querySelector("#companyWorkspaceLabel"),
+  companyAppTitle: document.querySelector("#companyAppTitle"),
   companyPhone: document.querySelector("#companyPhone"),
   companyAddress: document.querySelector("#companyAddress"),
   companyAddress2: document.querySelector("#companyAddress2"),
@@ -228,6 +247,7 @@ els.passwordResetForm.addEventListener("submit", resetPassword);
 els.backToLoginFromResetPassword.addEventListener("click", () => showLogin());
 els.passwordChangeForm.addEventListener("submit", changePassword);
 els.logoutButton.addEventListener("click", logout);
+els.themeToggle.addEventListener("click", toggleTheme);
 els.newTicket.addEventListener("click", () => openCompose());
 els.newTicketTop.addEventListener("click", () => openCompose());
 els.dashboardNav.addEventListener("click", () => switchView("dashboard"));
@@ -319,6 +339,7 @@ if (initialResetToken) {
 
 async function loadApp() {
   try {
+    await loadPublicBranding();
     const data = await apiRequest("action=bootstrap");
     currentUser = data.currentUser || null;
     applySettings(data.settings || {});
@@ -337,6 +358,16 @@ async function loadApp() {
       return;
     }
     showLogin("The ticket system could not be loaded. Please sign in again.");
+  }
+}
+
+async function loadPublicBranding() {
+  try {
+    const result = await apiRequest("action=public-branding");
+    applyBranding(result.branding || {});
+  } catch (error) {
+    console.error(error);
+    applyBranding(branding);
   }
 }
 
@@ -569,6 +600,78 @@ function showApp() {
   els.currentUserRole.textContent = currentUser?.role || "";
 }
 
+function normalizeTheme(value) {
+  return String(value || "").toLowerCase() === "dark" ? "dark" : "light";
+}
+
+function readStoredTheme() {
+  try {
+    const value = window.localStorage.getItem(themeStorageKey);
+    return value === "dark" || value === "light" ? value : "";
+  } catch {
+    return "";
+  }
+}
+
+function writeStoredTheme(theme) {
+  try {
+    window.localStorage.setItem(themeStorageKey, theme);
+  } catch {
+    // Theme persistence is a convenience; the toggle still works without storage.
+  }
+}
+
+function activeTheme() {
+  return readStoredTheme() || branding.theme || "light";
+}
+
+function applyTheme(theme = activeTheme()) {
+  const nextTheme = normalizeTheme(theme);
+  document.documentElement.dataset.theme = nextTheme;
+  els.themeToggle.setAttribute("aria-label", nextTheme === "dark" ? "Switch to light mode" : "Switch to dark mode");
+  els.themeToggle.title = nextTheme === "dark" ? "Switch to light mode" : "Switch to dark mode";
+}
+
+function toggleTheme() {
+  const nextTheme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  writeStoredTheme(nextTheme);
+  applyTheme(nextTheme);
+}
+
+function normalizeBranding(nextBranding = {}) {
+  const workspaceLabel = String(nextBranding.workspaceLabel || nextBranding.workspace_label || defaultBranding.workspaceLabel).trim() || defaultBranding.workspaceLabel;
+  const appTitle = String(nextBranding.appTitle || nextBranding.app_title || defaultBranding.appTitle).trim() || defaultBranding.appTitle;
+  return {
+    workspaceLabel,
+    appTitle,
+    logoName: String(nextBranding.logoName || nextBranding.logo_name || ""),
+    logoDataUrl: String(nextBranding.logoDataUrl || nextBranding.logo_data_url || ""),
+    logoUrl: String(nextBranding.logoUrl || nextBranding.logo_url || defaultCompanyLogo),
+    theme: normalizeTheme(nextBranding.theme || defaultBranding.theme),
+  };
+}
+
+function companyBrandingSource() {
+  return companies.find((company) => company.active !== false) || companies[0] || defaultBranding;
+}
+
+function applyBranding(nextBranding = {}) {
+  branding = normalizeBranding(nextBranding);
+  els.brandWorkspaceLabels.forEach((label) => {
+    label.textContent = branding.workspaceLabel;
+  });
+  els.brandTitles.forEach((title) => {
+    title.textContent = branding.appTitle;
+  });
+  document.title = branding.appTitle;
+
+  const logoSrc = branding.logoDataUrl || branding.logoUrl || defaultCompanyLogo;
+  els.brandLogos.forEach((logo) => {
+    if (logo.getAttribute("src") !== logoSrc) logo.src = logoSrc;
+  });
+  applyTheme();
+}
+
 function actorName() {
   return currentUser?.name || "System";
 }
@@ -602,6 +705,7 @@ function applySettings(settings = {}) {
   if (activeCompanyId && !companies.some((company) => company.id === activeCompanyId)) {
     activeCompanyId = companies[0]?.id || null;
   }
+  applyBranding(settings.branding || companyBrandingSource());
 }
 
 function normalizePrioritySetting(priority = {}, index = 0) {
@@ -767,6 +871,8 @@ function normalizeCompany(company = {}) {
     zip: String(company.zip || ""),
     phone: String(company.phone || ""),
     notes: String(company.notes || ""),
+    workspaceLabel: String(company.workspaceLabel || company.workspace_label || "Workspace"),
+    appTitle: String(company.appTitle || company.app_title || "Ticket System"),
     logoName: String(company.logoName || company.logo_name || ""),
     logoDataUrl: String(company.logoDataUrl || company.logo_data_url || ""),
     logoUrl: String(company.logoUrl || company.logo_url || defaultCompanyLogo),
@@ -777,6 +883,8 @@ function normalizeCompany(company = {}) {
 
 function blankCompany() {
   return normalizeCompany({
+    workspaceLabel: "Workspace",
+    appTitle: "Ticket System",
     logoUrl: defaultCompanyLogo,
     theme: "light",
     active: true,
@@ -1687,6 +1795,8 @@ function renderCompanyForm(company) {
 
   els.companyId.value = normalized.id || "";
   els.companyName.value = normalized.name;
+  els.companyWorkspaceLabel.value = normalized.workspaceLabel;
+  els.companyAppTitle.value = normalized.appTitle;
   els.companyPhone.value = normalized.phone;
   els.companyAddress.value = normalized.address;
   els.companyAddress2.value = normalized.address2;
@@ -1747,6 +1857,8 @@ function collectCompanyForm() {
   return normalizeCompany({
     id: Number(els.companyId.value) || null,
     name: els.companyName.value.trim(),
+    workspaceLabel: els.companyWorkspaceLabel.value.trim() || "Workspace",
+    appTitle: els.companyAppTitle.value.trim() || "Ticket System",
     phone: els.companyPhone.value.trim(),
     address: els.companyAddress.value.trim(),
     address2: els.companyAddress2.value.trim(),
@@ -1780,6 +1892,7 @@ async function saveCompany(event) {
       body: JSON.stringify(payload),
     });
     companies = Array.isArray(result.companies) ? result.companies.map(normalizeCompany) : companies;
+    applyBranding(result.branding || companyBrandingSource());
     const savedCompany = payload.id
       ? companies.find((company) => company.id === payload.id)
       : companies.find((company) => company.name.toLowerCase() === payload.name.toLowerCase());

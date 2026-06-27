@@ -218,6 +218,8 @@ function ensure_settings_schema(PDO $pdo): void
             zip VARCHAR(30) NOT NULL DEFAULT '',
             phone VARCHAR(60) NOT NULL DEFAULT '',
             notes TEXT NULL,
+            workspace_label VARCHAR(80) NOT NULL DEFAULT 'Workspace',
+            app_title VARCHAR(120) NOT NULL DEFAULT 'Ticket System',
             logo_name VARCHAR(190) NOT NULL DEFAULT '',
             logo_data_url MEDIUMTEXT NULL,
             logo_url VARCHAR(255) NOT NULL DEFAULT '/logo.svg',
@@ -274,8 +276,14 @@ function ensure_settings_schema(PDO $pdo): void
     if (!companies_table_has_column($pdo, 'notes')) {
         $pdo->exec('ALTER TABLE companies ADD COLUMN notes TEXT NULL AFTER phone');
     }
+    if (!companies_table_has_column($pdo, 'workspace_label')) {
+        $pdo->exec("ALTER TABLE companies ADD COLUMN workspace_label VARCHAR(80) NOT NULL DEFAULT 'Workspace' AFTER notes");
+    }
+    if (!companies_table_has_column($pdo, 'app_title')) {
+        $pdo->exec("ALTER TABLE companies ADD COLUMN app_title VARCHAR(120) NOT NULL DEFAULT 'Ticket System' AFTER workspace_label");
+    }
     if (!companies_table_has_column($pdo, 'logo_name')) {
-        $pdo->exec("ALTER TABLE companies ADD COLUMN logo_name VARCHAR(190) NOT NULL DEFAULT '' AFTER notes");
+        $pdo->exec("ALTER TABLE companies ADD COLUMN logo_name VARCHAR(190) NOT NULL DEFAULT '' AFTER app_title");
     }
     if (!companies_table_has_column($pdo, 'logo_data_url')) {
         $pdo->exec('ALTER TABLE companies ADD COLUMN logo_data_url MEDIUMTEXT NULL AFTER logo_name');
@@ -501,13 +509,14 @@ function settings_payload(PDO $pdo): array
             ];
         }, $pdo->query('SELECT id, sysaid_id, category, sub_category, third_category, description, visible_ssp, visible_admin, enable_incident, enable_request, enable_change, enable_problem, sort_order, active FROM ticket_categories ORDER BY sort_order, id')->fetchAll()),
         'companies' => companies_payload($pdo),
+        'branding' => branding_payload($pdo),
     ];
 }
 
 function companies_payload(PDO $pdo): array
 {
     $rows = $pdo->query('
-        SELECT id, name, address, address2, city, state, zip, phone, notes, logo_name, logo_data_url, logo_url, theme, active
+        SELECT id, name, address, address2, city, state, zip, phone, notes, workspace_label, app_title, logo_name, logo_data_url, logo_url, theme, active
         FROM companies
         ORDER BY active DESC, name, id
     ')->fetchAll();
@@ -523,6 +532,8 @@ function companies_payload(PDO $pdo): array
             'zip' => (string) $company['zip'],
             'phone' => (string) $company['phone'],
             'notes' => (string) ($company['notes'] ?? ''),
+            'workspaceLabel' => (string) ($company['workspace_label'] ?: 'Workspace'),
+            'appTitle' => (string) ($company['app_title'] ?: 'Ticket System'),
             'logoName' => (string) $company['logo_name'],
             'logoDataUrl' => (string) ($company['logo_data_url'] ?? ''),
             'logoUrl' => (string) ($company['logo_url'] ?: '/logo.svg'),
@@ -530,6 +541,38 @@ function companies_payload(PDO $pdo): array
             'active' => !empty($company['active']),
         ];
     }, $rows);
+}
+
+function branding_payload(PDO $pdo): array
+{
+    $stmt = $pdo->query('
+        SELECT name, workspace_label, app_title, logo_name, logo_data_url, logo_url, theme
+        FROM companies
+        WHERE active = 1
+        ORDER BY name, id
+        LIMIT 1
+    ');
+    $company = $stmt->fetch();
+    if (!$company) {
+        return [
+            'workspaceLabel' => 'Workspace',
+            'appTitle' => 'Ticket System',
+            'logoName' => '',
+            'logoDataUrl' => '',
+            'logoUrl' => '/logo.svg',
+            'theme' => 'light',
+        ];
+    }
+
+    $theme = (string) ($company['theme'] ?? 'light');
+    return [
+        'workspaceLabel' => (string) ($company['workspace_label'] ?: 'Workspace'),
+        'appTitle' => (string) ($company['app_title'] ?: 'Ticket System'),
+        'logoName' => (string) ($company['logo_name'] ?? ''),
+        'logoDataUrl' => (string) ($company['logo_data_url'] ?? ''),
+        'logoUrl' => (string) ($company['logo_url'] ?: '/logo.svg'),
+        'theme' => in_array($theme, ['light', 'dark'], true) ? $theme : 'light',
+    ];
 }
 
 function users_payload(PDO $pdo): array
