@@ -85,7 +85,6 @@ const els = {
   loginForm: document.querySelector("#loginForm"),
   loginTitle: document.querySelector("#loginTitle"),
   loginIntro: document.querySelector("#loginIntro"),
-  loginPortalHint: document.querySelector("#loginPortalHint"),
   loginEmail: document.querySelector("#loginEmail"),
   loginPassword: document.querySelector("#loginPassword"),
   loginError: document.querySelector("#loginError"),
@@ -624,8 +623,6 @@ function showLogin(message = "", isError = true) {
   els.loginIntro.textContent = portalContext.isPortal
     ? "Use your customer portal account to open and track requests."
     : "Use your team account to open the help desk.";
-  els.loginPortalHint.hidden = !portalContext.isPortal;
-  els.loginPortalHint.textContent = portalContext.isPortal ? portalUrlForWorkspace(portalContext.slug) : "";
   els.loginError.textContent = message;
   els.loginError.classList.toggle("success-message", !isError && message !== "");
   setFormMessage(els.resetRequestMessage);
