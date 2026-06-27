@@ -912,7 +912,7 @@ label textarea,
 
 .settings-form {
   display: grid;
-  grid-template-columns: 1fr 1.2fr 150px 170px auto auto;
+  grid-template-columns: minmax(130px, 1fr) minmax(190px, 1.2fr) minmax(130px, 0.8fr) minmax(150px, 0.9fr) minmax(160px, 0.9fr) auto auto auto auto;
 }
 
 .settings-list {
@@ -1116,7 +1116,7 @@ label textarea,
 }
 
 .user-setting-row {
-  grid-template-columns: minmax(140px, 1fr) minmax(190px, 1.2fr) minmax(130px, 0.8fr) minmax(160px, 0.8fr) auto auto auto;
+  grid-template-columns: minmax(130px, 1fr) minmax(190px, 1.2fr) minmax(130px, 0.8fr) minmax(150px, 0.9fr) minmax(160px, 0.9fr) auto auto auto auto auto;
 }
 
 .check-label {

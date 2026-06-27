@@ -214,8 +214,11 @@ const els = {
   newUserName: document.querySelector("#newUserName"),
   newUserEmail: document.querySelector("#newUserEmail"),
   newUserRole: document.querySelector("#newUserRole"),
+  newUserCompany: document.querySelector("#newUserCompany"),
   newUserPassword: document.querySelector("#newUserPassword"),
   newUserIsTech: document.querySelector("#newUserIsTech"),
+  newUserPortalAccess: document.querySelector("#newUserPortalAccess"),
+  newUserCanMonitorCompanies: document.querySelector("#newUserCanMonitorCompanies"),
   addCompany: document.querySelector("#addCompanyButton"),
   companySettingsList: document.querySelector("#companySettingsList"),
   companySettingsForm: document.querySelector("#companySettingsForm"),
@@ -284,6 +287,8 @@ els.newCategoryName.addEventListener("input", updateCategoryAddLevelOptions);
 els.newSubCategoryName.addEventListener("input", updateCategoryAddLevelOptions);
 els.newThirdCategoryName.addEventListener("input", updateCategoryAddLevelOptions);
 els.addUserForm.addEventListener("submit", saveNewUser);
+els.newUserRole.addEventListener("change", updateNewUserAccessDefaults);
+els.newUserCompany.addEventListener("change", updateNewUserMonitorDefault);
 els.addCompany.addEventListener("click", startNewCompany);
 els.companySettingsList.addEventListener("click", selectCompanyFromEvent);
 els.companySettingsForm.addEventListener("submit", saveCompany);
@@ -341,9 +346,9 @@ async function loadApp() {
   try {
     await loadPublicBranding();
     const data = await apiRequest("action=bootstrap");
-    currentUser = data.currentUser || null;
     applySettings(data.settings || {});
-    users = data.users?.length ? data.users : defaultUsers;
+    currentUser = data.currentUser ? normalizeUser(data.currentUser) : null;
+    users = data.users?.length ? data.users.map(normalizeUser) : defaultUsers.map(normalizeUser);
     tickets = Array.isArray(data.tickets) ? data.tickets.map(normalizeTicket) : [];
     if (currentUser?.passwordResetRequired) {
       showPasswordChange();
@@ -729,6 +734,62 @@ function normalizeStatusSetting(status = {}, index = 0) {
 
 function getTechUsers() {
   return users.filter((user) => user.active !== false && user.isTech !== false);
+}
+
+function defaultCompany() {
+  return companies.find((company) => company.active !== false && company.name.toLowerCase() === "weneedhelp")
+    || companies.find((company) => company.active !== false)
+    || companies[0]
+    || null;
+}
+
+function defaultCompanyId() {
+  return defaultCompany()?.id || "";
+}
+
+function companyById(companyId) {
+  const id = Number(companyId) || 0;
+  return companies.find((company) => Number(company.id) === id) || null;
+}
+
+function isWeneedhelpCompanyId(companyId) {
+  return (companyById(companyId)?.name || "").trim().toLowerCase() === "weneedhelp";
+}
+
+function activeCompanyOptions() {
+  const activeCompanies = companies.filter((company) => company.active !== false);
+  return activeCompanies.length ? activeCompanies : companies;
+}
+
+function renderCompanySelectOptions(selectedId) {
+  const options = activeCompanyOptions();
+  const normalizedSelectedId = Number(selectedId) || Number(defaultCompanyId()) || options[0]?.id || "";
+  return options.map((company) => {
+    const id = Number(company.id);
+    return `<option value="${id}"${id === normalizedSelectedId ? " selected" : ""}>${escapeHtml(company.name)}</option>`;
+  }).join("");
+}
+
+function normalizeUser(user = {}) {
+  const role = String(user.role || "End User");
+  const companyId = Number(user.companyId || user.company_id || defaultCompanyId()) || null;
+  const isEndUser = role.toLowerCase() === "end user";
+  const isAdminRole = role.toLowerCase().includes("admin");
+  const rawIsTech = user.isTech ?? user.is_tech;
+  const rawPortalAccess = user.portalAccess ?? user.portal_access;
+  return {
+    id: user.id ? Number(user.id) : null,
+    name: String(user.name || ""),
+    email: String(user.email || ""),
+    role,
+    companyId,
+    companyName: String(user.companyName || user.company_name || companyById(companyId)?.name || ""),
+    active: user.active !== false && user.active !== 0,
+    isTech: rawIsTech === undefined ? !isEndUser : Boolean(rawIsTech),
+    portalAccess: rawPortalAccess === undefined ? (isAdminRole || isEndUser) : Boolean(rawPortalAccess),
+    canMonitorCompanies: Boolean(user.canMonitorCompanies ?? user.can_monitor_companies ?? false) && isAdminRole && isWeneedhelpCompanyId(companyId),
+    passwordResetRequired: Boolean(user.passwordResetRequired ?? user.password_reset_required),
+  };
 }
 
 function starterTickets() {
@@ -1449,6 +1510,26 @@ function setNewUserDefaults() {
   const isEndUserMode = activeUserSettingsMode === "end-users";
   els.newUserRole.value = isEndUserMode ? "End User" : "Admin";
   els.newUserIsTech.checked = !isEndUserMode;
+  renderNewUserCompanyOptions();
+  updateNewUserAccessDefaults();
+}
+
+function renderNewUserCompanyOptions() {
+  els.newUserCompany.innerHTML = renderCompanySelectOptions(els.newUserCompany.value || defaultCompanyId());
+}
+
+function updateNewUserAccessDefaults() {
+  const role = els.newUserRole.value.toLowerCase();
+  const isEndUser = role === "end user";
+  const isAdminRole = role.includes("admin");
+  els.newUserIsTech.checked = !isEndUser;
+  els.newUserPortalAccess.checked = isEndUser || isAdminRole;
+  updateNewUserMonitorDefault();
+}
+
+function updateNewUserMonitorDefault() {
+  const isAdminRole = els.newUserRole.value.toLowerCase().includes("admin");
+  els.newUserCanMonitorCompanies.checked = isAdminRole && isWeneedhelpCompanyId(els.newUserCompany.value);
 }
 
 function switchView(view) {
@@ -1907,6 +1988,7 @@ async function saveCompany(event) {
 }
 
 function renderUserSettings() {
+  renderNewUserCompanyOptions();
   const visibleUsers = users.filter(userMatchesSettingsMode);
 
   if (!visibleUsers.length) {
@@ -1914,7 +1996,8 @@ function renderUserSettings() {
     return;
   }
 
-  els.userSettingsList.innerHTML = visibleUsers.map((user) => {
+  els.userSettingsList.innerHTML = visibleUsers.map((rawUser) => {
+    const user = normalizeUser(rawUser);
     const roles = [...new Set(["Tier 1 Tech", "Tier 2 Tech", "Admin", "End User", user.role].filter(Boolean))];
     return `
       <div class="setting-row user-setting-row" data-user-id="${user.id}">
@@ -1923,8 +2006,13 @@ function renderUserSettings() {
         <select class="setting-input" data-user-field="role">
           ${roles.map((role) => `<option${role === user.role ? " selected" : ""}>${escapeHtml(role)}</option>`).join("")}
         </select>
+        <select class="setting-input" data-user-field="companyId">
+          ${renderCompanySelectOptions(user.companyId)}
+        </select>
         <input class="setting-input" data-user-field="temporaryPassword" type="password" placeholder="Reset password" />
         <label class="check-label"><input data-user-field="isTech" type="checkbox"${user.isTech !== false ? " checked" : ""} /> Tech</label>
+        <label class="check-label"><input data-user-field="portalAccess" type="checkbox"${user.portalAccess ? " checked" : ""} /> Portal</label>
+        <label class="check-label"><input data-user-field="canMonitorCompanies" type="checkbox"${user.canMonitorCompanies ? " checked" : ""} /> Monitor all</label>
         <label class="check-label"><input data-user-field="active" type="checkbox"${user.active !== false ? " checked" : ""} /> Active</label>
         <button class="secondary-button" data-save-user type="button">Save</button>
       </div>
@@ -1933,8 +2021,9 @@ function renderUserSettings() {
 }
 
 function userMatchesSettingsMode(user) {
-  const role = (user.role || "").toLowerCase();
-  const isEndUser = role === "end user" || user.isTech === false;
+  const normalized = normalizeUser(user);
+  const role = (normalized.role || "").toLowerCase();
+  const isEndUser = role === "end user" || normalized.isTech === false;
   return activeUserSettingsMode === "end-users" ? isEndUser : !isEndUser;
 }
 
@@ -2027,12 +2116,15 @@ async function saveNewUser(event) {
         name: els.newUserName.value.trim(),
         email: els.newUserEmail.value.trim(),
         role: els.newUserRole.value,
+        companyId: Number(els.newUserCompany.value) || null,
         temporaryPassword: els.newUserPassword.value,
         isTech: els.newUserIsTech.checked,
+        portalAccess: els.newUserPortalAccess.checked,
+        canMonitorCompanies: els.newUserCanMonitorCompanies.checked,
         active: true,
       }),
     });
-    users = result.users || users;
+    users = Array.isArray(result.users) ? result.users.map(normalizeUser) : users;
     els.addUserForm.reset();
     setNewUserDefaults();
     renderUsers();
@@ -2055,7 +2147,7 @@ async function saveUserFromEvent(event) {
       method: "POST",
       body: JSON.stringify(user),
     });
-    users = result.users || users;
+    users = Array.isArray(result.users) ? result.users.map(normalizeUser) : users;
     renderUsers();
     renderAssigneeOptions();
     renderUserSettings();
@@ -2072,6 +2164,7 @@ function collectUserRow(row) {
   row.querySelectorAll("[data-user-field]").forEach((field) => {
     const key = field.dataset.userField;
     user[key] = field.type === "checkbox" ? field.checked : field.value.trim();
+    if (key === "companyId") user[key] = Number(field.value) || null;
   });
   return user;
 }
@@ -2130,13 +2223,13 @@ function renderDashboard() {
 }
 
 function renderUsers() {
-  const activeUsers = users.filter((user) => user.active !== false);
+  const activeUsers = users.map(normalizeUser).filter((user) => user.active !== false);
   els.userList.innerHTML = activeUsers.map((user) => `
     <article class="user-row">
       <div class="user-avatar">${escapeHtml(user.name.split(" ").map((part) => part[0]).join(""))}</div>
       <div>
         <strong>${escapeHtml(user.name)}</strong>
-        <span>${escapeHtml(user.email)}</span>
+        <span>${escapeHtml([user.email, user.companyName].filter(Boolean).join(" - "))}</span>
       </div>
       <small>${escapeHtml(user.role)}</small>
     </article>

@@ -145,7 +145,14 @@ try {
             json_response(['error' => 'Email and password are required'], 400);
         }
 
-        $stmt = $pdo->prepare('SELECT id, name, email, role, active, is_tech, password_hash, password_reset_required FROM users WHERE LOWER(email) = LOWER(?) AND active = 1 LIMIT 1');
+        $stmt = $pdo->prepare('
+            SELECT users.id, users.name, users.email, users.role, users.company_id, companies.name AS company_name,
+                users.active, users.is_tech, users.portal_access, users.can_monitor_companies, users.password_hash, users.password_reset_required
+            FROM users
+            LEFT JOIN companies ON companies.id = users.company_id
+            WHERE LOWER(users.email) = LOWER(?) AND users.active = 1
+            LIMIT 1
+        ');
         $stmt->execute([$email]);
         $user = $stmt->fetch();
         $hash = is_array($user) ? (string) ($user['password_hash'] ?? '') : '';
@@ -252,7 +259,14 @@ try {
             json_response(['error' => 'Use at least 10 characters'], 400);
         }
 
-        $stmt = $pdo->prepare('SELECT id, name, email, role, active, is_tech, password_hash, password_reset_required FROM users WHERE id = ? LIMIT 1');
+        $stmt = $pdo->prepare('
+            SELECT users.id, users.name, users.email, users.role, users.company_id, companies.name AS company_name,
+                users.active, users.is_tech, users.portal_access, users.can_monitor_companies, users.password_hash, users.password_reset_required
+            FROM users
+            LEFT JOIN companies ON companies.id = users.company_id
+            WHERE users.id = ?
+            LIMIT 1
+        ');
         $stmt->execute([(int) $currentUser['id']]);
         $user = $stmt->fetch();
         if (!$user || !password_verify($currentPassword, (string) ($user['password_hash'] ?? ''))) {
@@ -262,7 +276,14 @@ try {
         $newHash = password_hash($newPassword, PASSWORD_DEFAULT);
         $pdo->prepare('UPDATE users SET password_hash = ?, password_reset_required = 0 WHERE id = ?')->execute([$newHash, (int) $user['id']]);
 
-        $stmt = $pdo->prepare('SELECT id, name, email, role, active, is_tech, password_reset_required FROM users WHERE id = ? LIMIT 1');
+        $stmt = $pdo->prepare('
+            SELECT users.id, users.name, users.email, users.role, users.company_id, companies.name AS company_name,
+                users.active, users.is_tech, users.portal_access, users.can_monitor_companies, users.password_reset_required
+            FROM users
+            LEFT JOIN companies ON companies.id = users.company_id
+            WHERE users.id = ?
+            LIMIT 1
+        ');
         $stmt->execute([(int) $user['id']]);
         $updatedUser = $stmt->fetch();
         if (!$updatedUser) {
@@ -387,10 +408,25 @@ try {
         $role = trim_to_limit($body['role'] ?? 'Tier 1 Tech', 80);
         $active = !empty($body['active']);
         $isTech = !empty($body['isTech']);
+        $companyId = isset($body['companyId']) && $body['companyId'] ? (int) $body['companyId'] : default_company_id($pdo);
+        $isAdminRole = stripos($role, 'admin') !== false;
+        $isEndUserRole = strtolower($role) === 'end user';
+        $portalAccess = array_key_exists('portalAccess', $body)
+            ? !empty($body['portalAccess'])
+            : ($isAdminRole || $isEndUserRole);
+        $canMonitorCompanies = !empty($body['canMonitorCompanies']) && $isAdminRole && company_is_weneedhelp($pdo, $companyId);
         $temporaryPassword = (string) ($body['temporaryPassword'] ?? '');
 
         if ($name === '' || $email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             json_response(['error' => 'A valid name and email are required.'], 400);
+        }
+        if (!$companyId) {
+            json_response(['error' => 'A company is required.'], 400);
+        }
+        $companyCheck = $pdo->prepare('SELECT id FROM companies WHERE id = ? AND active = 1 LIMIT 1');
+        $companyCheck->execute([$companyId]);
+        if (!$companyCheck->fetch()) {
+            json_response(['error' => 'Select an active company for this user.'], 400);
         }
         if ($id && $id === (int) $currentUser['id'] && !$active) {
             json_response(['error' => 'You cannot deactivate your own account.'], 400);
@@ -413,11 +449,14 @@ try {
                 'name' => $name,
                 'email' => $email,
                 'role' => $role,
+                'company_id' => $companyId,
                 'active' => $active ? 1 : 0,
                 'is_tech' => $isTech ? 1 : 0,
+                'portal_access' => $portalAccess ? 1 : 0,
+                'can_monitor_companies' => $canMonitorCompanies ? 1 : 0,
                 'id' => $id,
             ];
-            $sql = 'UPDATE users SET name = :name, email = :email, role = :role, active = :active, is_tech = :is_tech';
+            $sql = 'UPDATE users SET name = :name, email = :email, role = :role, company_id = :company_id, active = :active, is_tech = :is_tech, portal_access = :portal_access, can_monitor_companies = :can_monitor_companies';
             if ($temporaryPassword !== '') {
                 $sql .= ', password_hash = :password_hash, password_reset_required = 1';
                 $fields['password_hash'] = password_hash($temporaryPassword, PASSWORD_DEFAULT);
@@ -425,8 +464,21 @@ try {
             $sql .= ' WHERE id = :id';
             $pdo->prepare($sql)->execute($fields);
         } else {
-            $stmt = $pdo->prepare('INSERT INTO users (name, email, role, active, is_tech, password_hash, password_reset_required) VALUES (?, ?, ?, ?, ?, ?, 1)');
-            $stmt->execute([$name, $email, $role, $active ? 1 : 0, $isTech ? 1 : 0, password_hash($temporaryPassword, PASSWORD_DEFAULT)]);
+            $stmt = $pdo->prepare('
+                INSERT INTO users (name, email, role, company_id, active, is_tech, portal_access, can_monitor_companies, password_hash, password_reset_required)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+            ');
+            $stmt->execute([
+                $name,
+                $email,
+                $role,
+                $companyId,
+                $active ? 1 : 0,
+                $isTech ? 1 : 0,
+                $portalAccess ? 1 : 0,
+                $canMonitorCompanies ? 1 : 0,
+                password_hash($temporaryPassword, PASSWORD_DEFAULT),
+            ]);
         }
 
         json_response(['users' => users_payload($pdo)]);

@@ -6,7 +6,7 @@
     <title>Ticket System</title>
     <link rel="icon" href="/favicon.ico?v=ineedawebsite-20260621" type="image/x-icon" sizes="any" />
     <link rel="shortcut icon" href="/favicon.ico?v=ineedawebsite-20260621" type="image/x-icon" />
-    <link rel="stylesheet" href="styles.css?v=20260627-branding" />
+    <link rel="stylesheet" href="styles.css?v=20260627-user-companies" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -585,8 +585,11 @@
                     <option>Admin</option>
                     <option>End User</option>
                   </select>
+                  <select id="newUserCompany"></select>
                   <input id="newUserPassword" type="password" placeholder="Temporary password" minlength="10" required />
                   <label class="check-label"><input id="newUserIsTech" type="checkbox" checked /> Tech</label>
+                  <label class="check-label"><input id="newUserPortalAccess" type="checkbox" checked /> Portal</label>
+                  <label class="check-label"><input id="newUserCanMonitorCompanies" type="checkbox" /> Monitor all</label>
                   <button class="secondary-button" type="submit">Add</button>
                 </form>
                 <div class="settings-list user-settings-list" id="userSettingsList"></div>
@@ -902,6 +905,6 @@
     </aside>
 
     <script src="categories.js?v=20260626"></script>
-    <script src="app.js?v=20260627-logo"></script>
+    <script src="app.js?v=20260627-user-companies"></script>
   </body>
 </html>

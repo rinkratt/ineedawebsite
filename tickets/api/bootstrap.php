@@ -153,6 +153,15 @@ function ensure_auth_schema(PDO $pdo): void
     if (!users_table_has_column($pdo, 'is_tech')) {
         $pdo->exec('ALTER TABLE users ADD COLUMN is_tech TINYINT(1) NOT NULL DEFAULT 1');
     }
+    if (!users_table_has_column($pdo, 'company_id')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN company_id INT NULL AFTER role');
+    }
+    if (!users_table_has_column($pdo, 'portal_access')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN portal_access TINYINT(1) NOT NULL DEFAULT 0 AFTER is_tech');
+    }
+    if (!users_table_has_column($pdo, 'can_monitor_companies')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN can_monitor_companies TINYINT(1) NOT NULL DEFAULT 0 AFTER portal_access');
+    }
     ensure_password_reset_schema($pdo);
 
     $checked = true;
@@ -308,6 +317,7 @@ function ensure_settings_schema(PDO $pdo): void
     seed_ticket_statuses($pdo);
     seed_ticket_categories($pdo);
     seed_default_company($pdo);
+    assign_default_company_to_users($pdo);
 
     $checked = true;
 }
@@ -400,6 +410,49 @@ function seed_default_company(PDO $pdo): void
     ]);
 }
 
+function default_company_id(PDO $pdo): ?int
+{
+    $stmt = $pdo->query("SELECT id FROM companies WHERE LOWER(name) = 'weneedhelp' ORDER BY id LIMIT 1");
+    $id = $stmt->fetchColumn();
+    if ($id !== false) {
+        return (int) $id;
+    }
+
+    $stmt = $pdo->query('SELECT id FROM companies ORDER BY active DESC, id LIMIT 1');
+    $id = $stmt->fetchColumn();
+    return $id === false ? null : (int) $id;
+}
+
+function company_is_weneedhelp(PDO $pdo, ?int $companyId): bool
+{
+    if (!$companyId) {
+        return false;
+    }
+
+    $stmt = $pdo->prepare('SELECT name FROM companies WHERE id = ? LIMIT 1');
+    $stmt->execute([$companyId]);
+    $name = $stmt->fetchColumn();
+    return is_string($name) && strtolower(trim($name)) === 'weneedhelp';
+}
+
+function assign_default_company_to_users(PDO $pdo): void
+{
+    $companyId = default_company_id($pdo);
+    if (!$companyId) {
+        return;
+    }
+
+    $pdo->prepare('UPDATE users SET company_id = ? WHERE company_id IS NULL OR company_id = 0')->execute([$companyId]);
+    $pdo->exec("UPDATE users SET portal_access = 1 WHERE LOWER(role) = 'end user' OR LOWER(role) LIKE '%admin%'");
+    $pdo->exec("
+        UPDATE users
+        SET can_monitor_companies = 0
+        WHERE LOWER(role) NOT LIKE '%admin%'
+            OR company_id IS NULL
+            OR company_id NOT IN (SELECT id FROM companies WHERE LOWER(name) = 'weneedhelp')
+    ");
+}
+
 function categories_seed_from_file(): array
 {
     $path = dirname(__DIR__) . '/categories.js';
@@ -423,8 +476,12 @@ function public_user(array $user): array
         'name' => (string) $user['name'],
         'email' => (string) $user['email'],
         'role' => (string) $user['role'],
+        'companyId' => isset($user['company_id']) && $user['company_id'] !== null ? (int) $user['company_id'] : null,
+        'companyName' => (string) ($user['company_name'] ?? ''),
         'active' => !isset($user['active']) || !empty($user['active']),
         'isTech' => !isset($user['is_tech']) || !empty($user['is_tech']),
+        'portalAccess' => !empty($user['portal_access']),
+        'canMonitorCompanies' => !empty($user['can_monitor_companies']),
         'passwordResetRequired' => !empty($user['password_reset_required']),
     ];
 }
@@ -435,7 +492,14 @@ function current_user(PDO $pdo): ?array
         return null;
     }
 
-    $stmt = $pdo->prepare('SELECT id, name, email, role, active, is_tech, password_reset_required FROM users WHERE id = ? AND active = 1 LIMIT 1');
+    $stmt = $pdo->prepare('
+        SELECT users.id, users.name, users.email, users.role, users.company_id, companies.name AS company_name,
+            users.active, users.is_tech, users.portal_access, users.can_monitor_companies, users.password_reset_required
+        FROM users
+        LEFT JOIN companies ON companies.id = users.company_id
+        WHERE users.id = ? AND users.active = 1
+        LIMIT 1
+    ');
     $stmt->execute([(int) $_SESSION['ticket_user_id']]);
     $user = $stmt->fetch();
     return $user ?: null;
@@ -607,7 +671,13 @@ function branding_payload(PDO $pdo): array
 
 function users_payload(PDO $pdo): array
 {
-    $users = $pdo->query('SELECT id, name, email, role, active, is_tech, password_reset_required FROM users ORDER BY active DESC, name')->fetchAll();
+    $users = $pdo->query('
+        SELECT users.id, users.name, users.email, users.role, users.company_id, companies.name AS company_name,
+            users.active, users.is_tech, users.portal_access, users.can_monitor_companies, users.password_reset_required
+        FROM users
+        LEFT JOIN companies ON companies.id = users.company_id
+        ORDER BY users.active DESC, users.name
+    ')->fetchAll();
     return array_map('public_user', $users);
 }
 
