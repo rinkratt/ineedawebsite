@@ -291,6 +291,10 @@ try {
         json_response(['message' => 'Your password has been reset. Sign in with the new password.']);
     }
 
+    if ($action === 'bootstrap' && isset($_GET['switch'])) {
+        consume_session_switch_token($pdo, (string) $_GET['switch']);
+    }
+
     $currentUser = require_login($pdo);
 
     if ($action === 'change-password') {
@@ -339,6 +343,12 @@ try {
 
     if (!empty($currentUser['password_reset_required']) && $action !== 'bootstrap') {
         json_response(['error' => 'Password change required'], 403);
+    }
+
+    if ($action === 'create-session-switch') {
+        $body = read_json_body();
+        $targetPortalSlug = normalize_workspace_label($body['targetPortalSlug'] ?? '', '');
+        json_response(['token' => create_session_switch_token($pdo, $currentUser, $targetPortalSlug)]);
     }
 
     if ($action === 'bootstrap') {

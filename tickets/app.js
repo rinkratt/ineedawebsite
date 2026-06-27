@@ -59,7 +59,9 @@ let activeTicketId = null;
 let activeDetailTab = "details";
 let activeView = "dashboard";
 let currentUser = null;
-const initialResetToken = new URLSearchParams(window.location.search).get("reset") || "";
+const initialParams = new URLSearchParams(window.location.search);
+const initialResetToken = initialParams.get("reset") || "";
+const initialSwitchToken = initialParams.get("switch") || "";
 let categorySettingsSearch = "";
 let settingsDirectorySearch = "";
 let activeSettingsPage = "home";
@@ -271,6 +273,8 @@ els.logoutButton.addEventListener("click", logout);
 els.themeToggle.addEventListener("click", toggleTheme);
 els.portalLogoutButton.addEventListener("click", logout);
 els.portalThemeToggle.addEventListener("click", toggleTheme);
+els.openUserPortal.addEventListener("click", switchSiteWithSession);
+els.openTicketPortal.addEventListener("click", switchSiteWithSession);
 els.newTicket.addEventListener("click", () => openCompose());
 els.newTicketTop.addEventListener("click", () => openCompose());
 els.portalNewTicket.addEventListener("click", () => openCompose());
@@ -373,6 +377,7 @@ async function loadApp() {
     portalMode = Boolean(data.portalMode) || portalContext.isPortal;
     users = data.users?.length ? data.users.map(normalizeUser) : defaultUsers.map(normalizeUser);
     tickets = Array.isArray(data.tickets) ? data.tickets.map(normalizeTicket) : [];
+    clearSwitchTokenFromUrl();
     if (currentUser?.passwordResetRequired) {
       showPasswordChange();
       return;
@@ -426,7 +431,17 @@ function queryWithPortalContext(query = "") {
   if (portalContext.slug && !params.has("portal")) {
     params.set("portal", portalContext.slug);
   }
+  if (initialSwitchToken && params.get("action") === "bootstrap" && !params.has("switch")) {
+    params.set("switch", initialSwitchToken);
+  }
   return params.toString();
+}
+
+function clearSwitchTokenFromUrl() {
+  if (!initialSwitchToken) return;
+  const nextUrl = new URL(window.location.href);
+  nextUrl.searchParams.delete("switch");
+  window.history.replaceState(null, "", `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
 }
 
 function hideLoginForms() {
@@ -754,6 +769,45 @@ function updateSiteSwitchers() {
   els.openUserPortal.hidden = !currentUser?.portalAccess;
   els.openTicketPortal.href = ticketPortalUrl();
   els.openTicketPortal.hidden = !(currentUser?.isTech || isAdmin());
+}
+
+function portalSlugFromUrl(url) {
+  const parsedUrl = new URL(url, window.location.href);
+  const querySlug = normalizeWorkspaceName(parsedUrl.searchParams.get("portal") || "", "");
+  if (querySlug) return querySlug;
+
+  const host = parsedUrl.hostname.toLowerCase();
+  const suffix = `.${portalRootDomain}`;
+  if (!host.endsWith(suffix) || host === portalRootDomain) {
+    return "";
+  }
+
+  const subdomain = host.slice(0, -suffix.length);
+  const label = subdomain.split(".").pop() || "";
+  const slug = normalizeWorkspaceName(label, "");
+  return slug === "www" ? "" : slug;
+}
+
+async function switchSiteWithSession(event) {
+  if (!currentUser) return;
+
+  event.preventDefault();
+  const link = event.currentTarget;
+  const targetUrl = new URL(link.href, window.location.href);
+  link.setAttribute("aria-busy", "true");
+
+  try {
+    const result = await apiRequest("action=create-session-switch", {
+      method: "POST",
+      body: JSON.stringify({ targetPortalSlug: portalSlugFromUrl(targetUrl.href) }),
+    });
+    targetUrl.searchParams.set("switch", result.token);
+    window.location.assign(targetUrl.href);
+  } catch (error) {
+    console.error(error);
+    window.alert(error.message || "Could not switch sites. Please try again.");
+    link.removeAttribute("aria-busy");
+  }
 }
 
 function keepCompanyWorkspaceNameDnsSafe() {

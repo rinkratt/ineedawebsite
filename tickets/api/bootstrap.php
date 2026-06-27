@@ -222,6 +222,22 @@ function ensure_password_reset_schema(PDO $pdo): void
     ");
 }
 
+function ensure_session_switch_schema(PDO $pdo): void
+{
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS session_switch_tokens (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            token_hash CHAR(64) NOT NULL,
+            expires_at DATETIME NOT NULL,
+            used_at DATETIME NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_session_switch_token (token_hash),
+            INDEX idx_session_switch_user (user_id, expires_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+}
+
 function ensure_auth_schema(PDO $pdo): void
 {
     static $checked = false;
@@ -254,6 +270,7 @@ function ensure_auth_schema(PDO $pdo): void
         $pdo->exec('ALTER TABLE users ADD COLUMN can_monitor_companies TINYINT(1) NOT NULL DEFAULT 0 AFTER portal_access');
     }
     ensure_password_reset_schema($pdo);
+    ensure_session_switch_schema($pdo);
 
     $checked = true;
 }
@@ -583,6 +600,21 @@ function company_by_workspace_label(PDO $pdo, string $workspaceLabel): ?array
     return $company ?: null;
 }
 
+function requested_portal_company(PDO $pdo): ?array
+{
+    $portalSlug = request_portal_slug();
+    if ($portalSlug === '') {
+        return null;
+    }
+
+    $company = company_by_workspace_label($pdo, $portalSlug);
+    if (!$company) {
+        json_response(['error' => 'This customer portal is not set up yet.'], 404);
+    }
+
+    return $company;
+}
+
 function user_can_access_portal_company(array $user, int $companyId): bool
 {
     if (empty($user['portal_access'])) {
@@ -593,6 +625,12 @@ function user_can_access_portal_company(array $user, int $companyId): bool
     return $userCompanyId === $companyId || !empty($user['can_monitor_companies']);
 }
 
+function user_can_access_ticket_portal(array $user): bool
+{
+    $role = strtolower((string) ($user['role'] ?? ''));
+    return !empty($user['is_tech']) || str_contains($role, 'admin');
+}
+
 function user_uses_portal_layout(array $user): bool
 {
     $role = strtolower((string) ($user['role'] ?? ''));
@@ -601,15 +639,14 @@ function user_uses_portal_layout(array $user): bool
 
 function portal_company_id_for_user(PDO $pdo, array $user): ?int
 {
-    $portalSlug = request_portal_slug();
-    if ($portalSlug !== '') {
-        $company = company_by_workspace_label($pdo, $portalSlug);
-        if ($company && user_can_access_portal_company($user, (int) $company['id'])) {
-            $_SESSION['ticket_portal_company_id'] = (int) $company['id'];
-            $_SESSION['ticket_portal_slug'] = (string) $company['workspace_label'];
-            return (int) $company['id'];
+    $company = requested_portal_company($pdo);
+    if ($company) {
+        if (!user_can_access_portal_company($user, (int) $company['id'])) {
+            json_response(['error' => 'Your account does not have access to this customer portal.'], 403);
         }
-        return null;
+        $_SESSION['ticket_portal_company_id'] = (int) $company['id'];
+        $_SESSION['ticket_portal_slug'] = (string) $company['workspace_label'];
+        return (int) $company['id'];
     }
 
     unset($_SESSION['ticket_portal_company_id'], $_SESSION['ticket_portal_slug']);
@@ -618,6 +655,78 @@ function portal_company_id_for_user(PDO $pdo, array $user): ?int
     }
 
     return null;
+}
+
+function create_session_switch_token(PDO $pdo, array $user, string $targetPortalSlug): string
+{
+    $targetPortalSlug = normalize_workspace_label($targetPortalSlug, '');
+    if ($targetPortalSlug !== '') {
+        $company = company_by_workspace_label($pdo, $targetPortalSlug);
+        if (!$company) {
+            json_response(['error' => 'This customer portal is not set up yet.'], 404);
+        }
+        if (!user_can_access_portal_company($user, (int) $company['id'])) {
+            json_response(['error' => 'Your account does not have access to this customer portal.'], 403);
+        }
+    } elseif (!user_can_access_ticket_portal($user)) {
+        json_response(['error' => 'Your account does not have access to the ticket portal.'], 403);
+    }
+
+    $token = bin2hex(random_bytes(32));
+    $tokenHash = hash('sha256', $token);
+    $expiresAt = (new DateTimeImmutable('+2 minutes'))->format('Y-m-d H:i:s');
+    $pdo->prepare('INSERT INTO session_switch_tokens (user_id, token_hash, expires_at) VALUES (?, ?, ?)')
+        ->execute([(int) $user['id'], $tokenHash, $expiresAt]);
+
+    return $token;
+}
+
+function consume_session_switch_token(PDO $pdo, string $token): void
+{
+    $token = trim($token);
+    if ($token === '') {
+        return;
+    }
+
+    $tokenHash = hash('sha256', $token);
+    $stmt = $pdo->prepare('
+        SELECT session_switch_tokens.id AS switch_id, users.id AS user_id
+        FROM session_switch_tokens
+        INNER JOIN users ON users.id = session_switch_tokens.user_id
+        WHERE session_switch_tokens.token_hash = ?
+            AND session_switch_tokens.used_at IS NULL
+            AND session_switch_tokens.expires_at >= NOW()
+            AND users.active = 1
+        ORDER BY session_switch_tokens.id DESC
+        LIMIT 1
+    ');
+    $stmt->execute([$tokenHash]);
+    $switchToken = $stmt->fetch();
+    if (!$switchToken) {
+        json_response(['error' => 'Session switch expired. Please sign in again.'], 401);
+    }
+
+    $pdo->beginTransaction();
+    try {
+        $update = $pdo->prepare('UPDATE session_switch_tokens SET used_at = NOW() WHERE id = ? AND used_at IS NULL');
+        $update->execute([(int) $switchToken['switch_id']]);
+        if ($update->rowCount() !== 1) {
+            $pdo->rollBack();
+            json_response(['error' => 'Session switch expired. Please sign in again.'], 401);
+        }
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_regenerate_id(true);
+        }
+        delete_host_only_session_cookie();
+        $_SESSION['ticket_user_id'] = (int) $switchToken['user_id'];
+        unset($_SESSION['ticket_portal_company_id'], $_SESSION['ticket_portal_slug']);
+        $pdo->commit();
+    } catch (Throwable $error) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $error;
+    }
 }
 
 function assign_default_company_to_users(PDO $pdo): void
